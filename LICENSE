@@ -1,0 +1,92 @@
+BFI Non-Commercial Evaluation License 1.0
+
+Copyright (c) 2026 Krystian Aleksander Swierk
+All rights reserved.
+
+This license governs the source code, scripts, data artifacts, documents, and other materials
+made available in this repository, unless a file expressly states otherwise.
+
+1. Purpose
+
+The materials are provided to allow non-commercial research, academic study, personal study,
+benchmarking, validation, internal evaluation, and testing of the Behavioral Fidelity Index
+(BFI) framework and related tooling.
+
+2. Permission Grant
+
+Subject to the terms of this license, you are granted a limited, revocable,
+non-exclusive, non-transferable, non-sublicensable license to:
+
+- use, reproduce, and run the materials for non-commercial research, evaluation, and testing;
+- modify the materials for non-commercial research, evaluation, and testing;
+- share unmodified or modified copies of the materials for non-commercial research,
+  evaluation, and testing, provided that:
+  - this license is included with the copy;
+  - attribution to Krystian Aleksander Swierk and the BFI project is preserved; and
+  - recipients receive the materials under these same non-commercial restrictions.
+
+3. Non-Commercial Restriction
+
+You may not use the materials, in whole or in part, for Commercial Use.
+
+"Commercial Use" includes, without limitation:
+
+- selling, sublicensing, or otherwise monetizing the materials;
+- using the materials in, or to support, a paid product, paid service, or hosted offering;
+- using the materials in consulting, contracting, or other fee-based work for clients;
+- deploying the materials in production for revenue-generating or business-serving purposes;
+- incorporating the materials into software or services distributed under commercial terms;
+- using the materials to train, fine-tune, evaluate, certify, or market a commercial model,
+  product, or service.
+
+If you need commercial rights, a separate written license is required from the copyright holder.
+
+4. Patent Rights
+
+No patent license is granted under this license, whether express, implied, by estoppel,
+or otherwise. Certain aspects of the BFI framework and related methods are patent pending.
+Your access to these materials does not grant any right to practice any patented or
+patent-pending invention beyond what is unavoidably required for the non-commercial
+evaluation permission stated above.
+
+5. Ownership and Reservation of Rights
+
+All rights not expressly granted are reserved.
+
+This license does not grant:
+
+- any trademark rights;
+- any right to use the author's name, brand, or project name to imply endorsement;
+- any right to remove attribution, license notices, or patent notices.
+
+6. Publications and Attribution
+
+If you publish results derived from use of these materials, you must provide reasonable
+attribution to the BFI project and the author.
+
+7. Compliance With Law
+
+You are responsible for complying with all applicable laws, regulations, and third-party rights.
+
+8. Termination
+
+This license terminates automatically if you violate any term of it. Upon termination,
+you must stop using and distributing the materials and destroy copies in your possession
+or control, except where retention is required by law.
+
+9. No Warranty
+
+THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+NON-INFRINGEMENT, ACCURACY, OR PERFORMANCE.
+
+10. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE AUTHOR SHALL NOT BE LIABLE FOR ANY CLAIM,
+DAMAGES, OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
+OUT OF, OR IN CONNECTION WITH THE MATERIALS OR THE USE OF OR OTHER DEALINGS IN THE MATERIALS.
+
+11. Contact
+
+For commercial licensing, collaboration, or permissions questions, contact:
+krystian@ulfberht.ai
