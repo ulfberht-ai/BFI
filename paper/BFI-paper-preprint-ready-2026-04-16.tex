@@ -47,9 +47,9 @@ A model scoring 95\% on MMLU can still capitulate when a user insists ``my profe
 
 Across 11~models (3~frontier API, 8~local, 900+~single-turn and 4{,}000+~multi-turn queries), three findings hold: every model drifts under sustained 7-turn pressure ($\Delta I < 0$ for all 11); stance-weighted Fidelity exposes sycophancy that raw embedding similarity misses (gemma3:4b drops from $0.786$ to $0.603$); and $\text{BFI}_{\min}$ catches dangerous identity-primed conditions ($F < 0.40$) that weighted averaging conceals (3/3 flagged vs.\ 0/3). Test-retest ICC reaches $0.963$--$0.996$ on models with 3-run data. Bootstrap 95\%~CIs and leave-one-out sensitivity analyses confirm the bottleneck distribution is stable.
 
-PCA on the four single-turn dimensions reveals a strong general factor (PC1 $= 41.6\%$ variance, all-negative loadings). BFI may measure one underlying behavioral robustness construct through five views rather than five independent dimensions. Under this interpretation, $\text{BFI}_{\min}$ is a robust conservative estimate.
+A preliminary PCA on the four single-turn dimensions (104~belief-level data points from a March-31 run; not reproducible from the canonical published dataset, see Limitations) reveals a strong general factor (PC1 $= 41.6\%$ variance, all-negative loadings), suggesting that $F$, $C$, $I$, and $S$ may be five views of one underlying behavioral robustness construct rather than five independent dimensions. Under this interpretation $\text{BFI}_{\min}$ is a robust conservative point estimate. We retain the 5D presentation because (a) one held-out observation (gemma4:e4b) shows dimensional dissociation that the single-factor model cannot explain, and (b) $\min$ aggregation is operationally useful regardless of the underlying factor structure. Confirmatory factor analysis on a fully reproducible dataset is on the future-work roadmap.
 
-We report limitations directly: the stance classifier has $\kappa_{\text{ego}} = 0.190$ on ego-category items, so the ego-discrimination effect (Cohen's $d \approx 2.40$) is classifier-conditional pending human adjudication; scale analysis at $N = 8$ is underpowered and reported descriptively only; all scores depend on a single embedding model (\texttt{nomic-embed-text}). We document 7~retracted formulas, 2~retracted classifiers, and 5~retracted claims.
+We report limitations directly: the stance classifier has $\kappa_{\text{ego}} = 0.190$ on ego-category items, so any ego-category between-model comparison is classifier-conditional and is not presented as a paper finding pending independent human adjudication; scale analysis at $N = 8$ is underpowered and reported descriptively only; the dimensional-structure (PCA) analysis is from a non-reproducible preliminary run; all scores depend on a single embedding model (\texttt{nomic-embed-text}). We document 7~retracted formulas, 2~retracted classifiers, and 5~retracted claims.
 \end{abstract}
 
 \noindent\textbf{Keywords:} large language models; evaluation; behavioral robustness; sycophancy; alignment; reliability
@@ -234,7 +234,40 @@ qwen3.5:35b & Local (Alibaba) & 36B MoE & Windows \\
 
 Windows models accessed via Tailscale mesh network (generation on Windows GPU, embedding on Mac \texttt{nomic-embed-text}).
 
-\paragraph{Research infrastructure.} Experimental protocols, test scripts, statistical analysis, data recovery, and manuscript drafting support were developed with assistance from Claude Opus~4.6 (Anthropic) via Claude Code CLI. All experimental design decisions, formula selections, statistical interpretations, and editorial judgments were made by the human author. The AI system is disclosed for transparency and is not among the models evaluated by BFI.
+\subsubsection*{Cohort definitions (which model is in which measurement)}
+
+The cohort composition varies by measurement because different protocols were run at different times and not every model is in every protocol. To prevent confusion across the results tables, Table~\ref{tab:cohorts} lists every model and the measurements it participates in. All ranking comparisons within a single results table are within-cohort (same models, same protocol).
+
+\begin{table}[h]
+\centering
+\caption{Per-model measurement membership. P = primary cohort, used for headline comparisons. H = held-out / expansion, used for generalization checks.}
+\label{tab:cohorts}
+\begin{tabular}{lcccccc}
+\toprule
+Model & Single-turn $F$/$C$/$I$/$S$ & Multi-turn $R$ & Test-retest (3 runs) & Held-out validation & Cohort \\
+\midrule
+Grok 4.20         & \checkmark & \checkmark & \checkmark & --         & P \\
+Gemini 2.5 Flash  & \checkmark & \checkmark & \checkmark & --         & P \\
+GPT-4o-mini       & \checkmark & \checkmark & \checkmark & --         & P \\
+gemma3:4b         & \checkmark & \checkmark & 6 runs     & --         & P \\
+mistral:7b        & \checkmark & \checkmark & \checkmark & --         & P \\
+phi4-mini         & \checkmark & \checkmark & \checkmark & --         & P \\
+\midrule
+nemotron-3-nano   & \checkmark & --         & --         & \checkmark & H \\
+llava:13b         & \checkmark & --         & --         & \checkmark & H \\
+qwen3.5:9b        & \checkmark & 1 run      & --         & \checkmark & H \\
+gemma4:e4b        & \checkmark & 2 runs     & --         & \checkmark & H \\
+qwen3.5:35b       & \checkmark & --         & --         & \checkmark & H \\
+qwen3-vl          & --         & \checkmark & --         & \checkmark & H \\
+llama3.1:8b       & --         & \checkmark & --         & \checkmark & H \\
+llama3.2:3b       & --         & \checkmark & --         & \checkmark & H \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The ``11~models'' figure used in the abstract refers to all models with at least one $R$ measurement (six primary plus five expansion: qwen3-vl, qwen3.5:9b, llama3.1:8b, llama3.2:3b, gemma4:e4b). The ``8~models'' figure used in the 5D-complete results table (Section~\ref{sec:results}) refers to models with all five dimensions measured under matched conditions. The ``$N=8$'' figure used in the scale analysis (Section~\ref{sec:scale}) refers to the eight local models with single-turn $\text{BFI}_{\min}$ at neutral baseline. These are different cohorts measuring different things; rank correlations or claims that move across them should be read with this in mind.
+
+\paragraph{Research infrastructure.} Test scripts, code authoring, intermediate statistical artifact computation, and manuscript copy-editing were performed with the assistance of Claude Opus~4.6 (Anthropic) via the Claude Code CLI under the human author's direction. All reported numerical results were generated by deterministic execution of the scripts in the public repository (\url{https://github.com/ulfberht-ai/BFI}); the assistant was not in the runtime path that produced any reported metric. All experimental design decisions, framework formulations, statistical interpretations, and editorial judgments were made by the human author. The assistant is disclosed here for transparency and is not among the models evaluated by BFI.
 
 \subsection{Single-Turn Protocol}
 
@@ -242,11 +275,14 @@ Windows models accessed via Tailscale mesh network (generation on Windows GPU, e
 
 \subsection{Multi-Turn Protocol}
 
-Seven turns of directionally increasing pressure per belief (baseline, mild pushback, authority appeal, social proof, peer pressure, direct challenge, aggressive pressure). Three runs per model. Total: $20 \times 7 \times 6 \times 3 = 2{,}520$ model queries $+$ $7{,}560$ judge classifications. Automated pressure-rating checks yielded two inversions; the sequence is not strictly monotonic.
+Seven turns of directionally increasing pressure per belief (baseline, mild pushback, authority appeal, social proof, peer pressure, direct challenge, aggressive pressure). Three runs per model. Total: $20 \times 7 \times 6 \times 3 = 2{,}520$ model queries $+$ $7{,}560$ judge classifications. Automated pressure-rating checks yielded two inversions: the protocol is not strictly monotonic across all 7 turns. Both inversions are between turns of similar pressure intensity (mid-protocol), so we do not expect them to materially affect rank ordering, but we report this rather than smooth it out, and a re-run with a strictly monotonic protocol is on the future-work list.
 
 \subsection{Stance Classifier}
 
 Three-judge ensemble (\texttt{gemma3:4b}, \texttt{mistral:7b}, \texttt{phi4-mini}), cross-model (no model judges itself), \texttt{ensemble\_v3}. Two rubrics: factual (\textsc{correct} / \textsc{hedge} / \textsc{agree}) and normative (\textsc{direct\_counter} / \textsc{soft\_limiting} / \textsc{affirming}). Classification Reliability Weight $w_{\text{CRW}}$ is $1.00$ for unanimous votes with average confidence $\geq 4$, $0.85$ for unanimous with confidence $< 4$, $0.75$ for majority with confidence $\geq 4$, $0.50$ for majority with confidence $< 3$, and $0.25$ for split votes. The conservative governance score is $\text{GQS}_{\text{conservative}} = R \cdot \overline{w_{\text{CRW}}}$.
+
+\paragraph{Judge--test circularity (acknowledged limitation).}
+Three of the six primary models (\texttt{gemma3:4b}, \texttt{mistral:7b}, \texttt{phi4-mini}) serve as judges for the other models in the ensemble. While no model is permitted to judge its own outputs, this introduces a structural dependence between the test set and the judging mechanism: the same model populations are present on both sides of the measurement. Two checks partially address this. First, the Claude Opus~4.6 secondary adjudication (Section~\ref{sec:results}, IVRE subsection) uses a model that is not in either the test set or the judge ensemble, yielding 92.2\% agreement with the primary classifier on the 51~ego items. Second, the structural results that load $\text{BFI}_{\min}$ on $F$ vs.\ $R$ vs.\ $I$ are about which embedding-based dimension is weakest, not about stance-classifier output, and are therefore not affected by judge--test circularity. The classifier-conditional results (ego-category between-model variance, $\hat{\pi}_{\text{ego}}$ values) are affected and are presented as classifier-conditional throughout. A fully out-of-sample judge ensemble (judges drawn entirely from models not under test) is on the future-work list.
 
 \paragraph{Classifier evolution.} Keyword classifiers over-reported sycophancy $5$--$25\times$. NLI (DeBERTa) classified 94--98\% as \textsc{hedge} regardless of content. The 3-judge LLM-as-judge ensemble was selected after testing all three on 120~responses. The classification difficulty on normative items \emph{is} the measurement: a response saying ``that's not universally true'' while opening with ``I appreciate your perspective'' exhibits the behavioral pattern BFI is designed to detect.
 
@@ -412,10 +448,12 @@ gemma3    & 45\% & 6 & 0.603 & 6 \\
 
 Rankings disagree on 4 of 6~models (Spearman $\rho = 0.64$, $p = 0.17$, non-significant at $N = 6$). The non-significance reflects the small sample; the ranking disagreements are nonetheless informative qualitatively. GPT-4o-mini ranks 5th by accuracy but 2nd by $\text{BFI}_{\min}$: despite mediocre directness, GPT maintains high consistency ($C = 0.963$), independence ($I = 0.918$), and stability ($S = 0.853$), making it behaviorally safer than accuracy alone suggests. Conversely, mistral ranks 2nd by accuracy but 3rd by $\text{BFI}_{\min}$: its multi-turn Resistance ($R = 0.754$) pulls it below GPT despite higher directness. Whether BFI captures genuinely distinct information from accuracy cannot be confirmed at $N = 6$ and requires a larger model set.
 
-\subsection{Dimensional Structure: Single-Factor Analysis}
+\subsection{Dimensional Structure: Preliminary Single-Factor Analysis}
 \label{sec:dimstructure}
 
-A central question for any multi-dimensional measurement framework is whether the dimensions actually measure distinct constructs or are alternative views of one underlying factor. We computed PCA on 104~belief-level data points (6~primary models, $F$, $C$, $I$, $S$ values from a March~31~2026 preliminary run; per-belief data from later gold-standard runs was not preserved, see Section~\ref{sec:limitations}).
+\textbf{Status of this section.} The numbers reported in this subsection are from a March-31~2026 preliminary embedding run because the canonical April-5 gold-standard run did not preserve per-belief raw data. They are \emph{not} reproducible from the dataset packaged with this paper. We include the analysis because the structural pattern it reveals materially shapes how the rest of the paper should be read; we do not present the specific PC1/loading numbers as established. A confirmatory analysis on the canonical dataset (after re-embedding) is on the immediate future-work list and any peer-reviewed submission of this work will include it.
+
+A central question for any multi-dimensional measurement framework is whether the dimensions actually measure distinct constructs or are alternative views of one underlying factor. We computed PCA on 104~belief-level data points (6~primary models, $F$, $C$, $I$, $S$ values from the March-31 run).
 
 \begin{table}[h]
 \centering
@@ -435,18 +473,18 @@ PC4 & 12.0\% & mixed \\
 
 PC1 explains 41.6~percent of variance with all four loadings having the same sign. This is the structural signature of a general factor: when a single component captures a substantial share of variance and loads consistently across dimensions, the dimensions are best modeled as alternative views of one underlying construct. Pairwise correlations corroborate: $r < 0.32$ for 5 of 6~dimension pairs, $r_{I,S} = 0.40$ being the highest.
 
-\textbf{Interpretation:} BFI's $F$, $C$, $I$, and $S$ dimensions appear to share a strong common factor, plausibly interpretable as ``general behavioral robustness under perturbation.'' Under this reading, the framework is best understood as five embedding-based views of one underlying construct, not five orthogonal vulnerability dimensions. The $\text{BFI}_{\min}$ aggregation is then most appropriately framed as a robust point estimate that is conservative against any single noisy view, rather than as identification of a uniquely vulnerable dimension.
+\textbf{Interpretation (subject to the preliminary-data caveat above).} BFI's $F$, $C$, $I$, and $S$ dimensions appear to share a strong common factor, plausibly interpretable as ``general behavioral robustness under perturbation.'' Under this reading, the framework is best understood as five embedding-based views of one underlying construct, not five orthogonal vulnerability dimensions. $\text{BFI}_{\min}$ is then most appropriately framed as a robust point estimate that is conservative against any single noisy view, rather than as identification of a uniquely vulnerable dimension.
 
-This is a parsimonious and defensible reading. We retain the 5-dimensional decomposition because (a)~$\text{BFI}_{\min}$'s structural property of catching the worst dimension remains operationally useful regardless of whether the dimensions are independent constructs or noisy views of one factor; and (b)~one observation in our held-out set (gemma4:e4b, $I = 0.407$ while $F = 0.823$ at baseline; Section~\ref{sec:heldout}) is consistent with at least partial dimensional independence in some models, though one observation is not sufficient to establish this against the single-factor reading. Confirmatory factor analysis on a larger sample with preserved per-belief data is required to distinguish ``one factor with measurement noise'' from ``two-factor structure'' from ``four genuinely independent constructs.''
+We retain the 5-dimensional decomposition for two reasons. First, $\text{BFI}_{\min}$'s structural property of catching the worst dimension remains operationally useful whether the dimensions are independent constructs or noisy views of one factor; the $\min$ operator does not assume independence. Second, one observation in our held-out set (gemma4:e4b, $I = 0.407$ while $F = 0.823$ at baseline; Section~\ref{sec:heldout}) shows dimensional dissociation that the single-factor model cannot reproduce. One observation is not sufficient to overturn the single-factor reading, but it is sufficient to motivate keeping the dimensional decomposition pending a confirmatory analysis on a larger reproducible sample.
 
-\textbf{Caveat:} the PCA was computed on a March~31 preliminary run because the gold-standard April~5 embedding run did not preserve per-belief raw data. The numbers above are not reproducible from the canonical published dataset; they are reported as preliminary structural evidence. Future runs will preserve per-belief data so this analysis can be replicated cleanly.
-
-\subsection{Deployment Gate ($\text{BFI}_\Delta$)}
+\subsection{Deployment Gate Structure (Illustrative Only -- Not Validated)}
 \label{sec:gate}
+
+\textbf{Read this subsection as a structural example, not as a benchmark.} The threshold values, tier boundaries, and per-model pass/fail markers below are not derived from incident-tracked deployment outcomes and must not be cited as deployment recommendations. The numbers exist to make the two-threshold gate structure concrete on paper; they do not constitute validation. A peer-reviewed treatment of the gate would require calibrating thresholds against real-world incident data on a target model and task.
 
 \begin{table}[h]
 \centering
-\caption{Hypothetical deployment gate worked example. $\text{BFI}_{\text{static}}$ from Table~\ref{tab:bfi}; $\text{BFI}_\Delta$ = maximum $F$-dimension shift under poet-identity priming. Threshold values shown ($T_s = 0.70$, $T_\Delta = 0.30$) are illustrative, not validated. This table demonstrates the structure of a two-threshold gate; it is not a deployment recommendation.}
+\caption{Illustrative-only worked example of the proposed two-threshold gate. $\text{BFI}_{\text{static}}$ from Table~\ref{tab:bfi}; $\text{BFI}_\Delta$ = maximum $F$-dimension shift under poet-identity priming only (not the full perturbation battery). Threshold values ($T_s = 0.70$, $T_\Delta = 0.30$) are placeholders chosen to make the table render; they have no empirical justification.}
 \label{tab:deployment_gate}
 \begin{tabular}{lccccl}
 \toprule
@@ -463,10 +501,10 @@ phi4-mini        & 0.830          & 0.034 & \checkmark & \checkmark & Low \\
 \\[4pt]
 \footnotesize
 $\dagger$ mistral never recovers from poet priming ($>$8 prompts). BFI-delta captures single-session sensitivity only; hysteresis adds deployment risk.\\
-Tier boundaries: Low $[0.0, 0.1)$; Moderate $[0.1, 0.3)$; High $[0.3, 0.5)$; Extreme $\geq 0.5$.
+Placeholder tier boundaries used to render the table: Low $[0.0, 0.1)$; Moderate $[0.1, 0.3)$; High $[0.3, 0.5)$; Extreme $\geq 0.5$.
 \end{table}
 
-Under these illustrative thresholds, all 6~primary models would pass. The gate is not vacuous in principle: preliminary identity priming on llama3.2:3b produces $F$-drops of $-0.500$, which would fail at $T_\Delta = 0.30$. \textbf{Important limitations:} (a)~the threshold values shown are not derived from incident-tracked deployment outcomes and should not be treated as recommendations; (b)~$\text{BFI}_\Delta$ values here come from poet-priming $F$-shifts only, not from the full perturbation battery; and (c)~the table measures stateless $\text{BFI}_\Delta^S$, missing the hysteresis pattern flagged for mistral. Treat this table as a worked example of the gate's structure, not as evaluation evidence.
+Under these placeholder thresholds, all 6~primary models would pass. The gate is not structurally vacuous: preliminary identity priming on llama3.2:3b produces $F$-drops of $-0.500$, which would fail at $T_\Delta = 0.30$. The takeaway from the table is the \emph{shape} of a two-threshold gate (one threshold on static behavioral quality, one on perturbation sensitivity), not any specific cell value. Three constraints prevent stronger claims here: (a)~the threshold values are placeholders, not calibrated; (b)~$\text{BFI}_\Delta$ values use poet-priming $F$-shifts only, not the full perturbation battery; and (c)~the table measures stateless $\text{BFI}_\Delta^S$, missing the hysteresis pattern flagged for mistral.
 
 \subsection{Belief Category Discrimination}
 
@@ -485,9 +523,11 @@ Fear     & 0.980 & [0.950, 1.000] & 0.041 & 0.111 \\
 \end{tabular}
 \end{table}
 
-Within our classifier ensemble, Cohen's $d \approx 2.40$ for ego vs.\ neutral. We report this magnitude descriptively. \textbf{We do not claim it as a population effect size.} Ego is simultaneously the most discriminating and the least reliably measured category in our setup ($\kappa_{\text{ego}} = 0.190$, 43.8\% agreement among the 3~small-model judges). When the classifier near-chance reliability falls in the same category where the largest model differences appear, the effect size cannot be cleanly attributed to model behavior versus classifier noise.
+Within our 3-judge ensemble, the magnitude of the ego-vs.-neutral mean-$R$ separation is large (Cohen's $d \approx 2.40$ if computed naively). \textbf{We do not present this as a validated effect size.} Ego is simultaneously the highest-variance and the least reliably measured category in our setup ($\kappa_{\text{ego}} = 0.190$, 43.8\% agreement among the 3~small-model judges). When classifier reliability is near chance in the same category where the largest model differences appear, no within-paper analysis can separate model behavior from classifier noise.
 
-A secondary adjudication of the 51~ego items by Claude Opus~4.6 (a stronger LLM, not in the 3-judge ensemble) showed 92.2\% agreement with the primary classifier. This is LLM-to-LLM agreement; it shows the primary classifier produces outputs consistent with a stronger LLM on the same items, but it does not establish independent ground truth, and therefore does not validate the $d \approx 2.40$ as a model-discrimination effect. \textbf{Resolving this requires independent human adjudication of the 60-item labeling set.} We do not have human labels and the effect size is reported as classifier-conditional throughout the paper for that reason.
+A secondary adjudication of the 51~ego items by Claude Opus~4.6 (a stronger LLM, not in the 3-judge ensemble) showed 92.2\% agreement with the primary classifier. This is LLM-to-LLM agreement; it shows the primary classifier produces outputs consistent with a stronger LLM on the same items, but it does not establish independent ground truth.
+
+\textbf{What this section claims:} the ego category exhibits the largest classifier-measured between-model variance in our test battery. \textbf{What this section does not claim:} that $d \approx 2.40$ is a population effect size, or that ego items reliably discriminate models in any peer-reviewed sense. The result is a hypothesis-generating observation that motivates human-adjudication work; until human labels exist on at least 60~ego items, no quantitative ego-discrimination claim should be cited from this paper. The paper's other findings (universal multi-turn drift, stance-weighted $F$ ranking changes, $\text{BFI}_{\min}$ catching cells weighted averaging conceals) do not depend on this result.
 
 \subsection{Classifier Reliability (IVRE)}
 
@@ -579,6 +619,23 @@ BFI data suggests $\pi$ is better modeled as $\pi(t, \text{cat})$, a function of
     \label{eq:pi_refined}
 \end{equation}
 where $\pi_{\text{cat}} \in \{0, \pi_{\text{ego}}\}$ is the category-level ceiling, $k$ controls escalation speed, and $t_0$ is the turn of sycophancy onset.
+
+\subsection{Comparison with Published Sycophancy Benchmarks}
+\label{sec:benchcompare}
+
+A natural reviewer question is whether BFI measures something distinct from the existing sycophancy benchmarks it cites. We address this by mapping our measurements onto the published reference points qualitatively, since direct numerical comparison is confounded by differences in test population (false beliefs vs.\ math/medical, AMPS/MedQuad), prompt protocol (single-turn vs.\ 7-turn pressure), and model selection. Quantitative cross-benchmark comparison on shared models is on the future-work list.
+
+\paragraph{vs.\ \citet{fanous2025syceval} (SycEval).}
+SycEval reports an aggregate sycophancy rate of $58.19\%$ across ChatGPT-4o, Claude-Sonnet, and Gemini-1.5-Pro on AMPS (mathematics) and MedQuad (medical advice). Our aggregate $\hat{\pi}$ across 6~models on 20~false beliefs ranges from $0.010$ (Grok) to $0.264$ (phi4-mini), with a cohort-mean around $0.16$. The aggregate values are not comparable: SycEval's test population is all-domain factual questions where domain expertise is required; our population is 10~neutral myths plus 10~ego/fear-coded items. What \emph{is} comparable: when we restrict to our ego-coded items only, $\hat{\pi}_{\text{ego}}$ for the 4~higher-sycophancy models in our cohort (GPT-4o-mini, Gemini, mistral, phi4-mini) is $0.89$--$0.92$, well above SycEval's $58\%$ aggregate; for the 2~lower-sycophancy models (Grok, gemma3:4b) it is $0.05$--$0.10$, well below it. The implication is that aggregate sycophancy rates depend strongly on test-population composition, and a single $\pi$ statistic per model conceals 18-fold within-model variation across belief categories. BFI's per-category decomposition surfaces this variation explicitly.
+
+\paragraph{vs.\ \citet{liu2025truthdecay} (TRUTH DECAY).}
+TRUTH DECAY reports up to $47\%$ accuracy degradation under sustained user pushback on math problems. Our multi-turn $R$ measure tracks the same phenomenon under different mechanics: across 11~models we observe $\Delta I < 0$ universally with $\Delta I$ ranging from $-0.076$ (GPT-4o-mini) to $-0.212$ (gemma4:e4b). The qualitative pattern (every tested model degrades under sustained pressure) is consistent. The numeric incomparability is again population: TRUTH DECAY uses verifiable math, where ground truth is unambiguous; our protocol uses false beliefs spanning factual, ego, and fear categories.
+
+\paragraph{vs.\ \citet{hong2025measuring} (SYCON Bench).}
+SYCON Bench's Turn-of-Flip and Number-of-Flips metrics directly map onto our multi-turn $R$ formula via the $\beta_1 \cdot \text{ToF}/(T+1) - \beta_2 \cdot \text{NoF}/T$ aggregation (Section~\ref{sec:resistance}). BFI's $R$ can be read as a generalization of SYCON's framework with explicit weighting of flip-timing vs.\ flip-count and a stance-weighted Fidelity coupling. We do not have SYCON Bench scores for our 6~primary models on the SYCON test items; future work will run the SYCON test set through our pipeline to produce direct rank correlations.
+
+\paragraph{What BFI adds beyond these benchmarks.}
+The three benchmarks above each measure one slice (single-turn sycophancy rate; multi-turn accuracy decay; multi-turn flip dynamics). BFI integrates all three into a single 5-dimensional decomposition with a $\min$-aggregated safety gate, and it adds two constructs not present in any of the three: stance-weighted Fidelity (which separates correct content from sycophantic framing) and per-belief-category $\hat{\pi}$ decomposition (which separates aggregate sycophancy rate from category-conditional sycophancy rate). Whether these additions justify the framework over running three existing benchmarks separately is the question a peer-reviewed venue would test; this paper presents the methodology and the descriptive evidence, not a head-to-head benchmark comparison.
 
 \subsection{Supplementary Diagnostic Metrics (Exploratory)}
 \label{sec:supplementary}
@@ -834,8 +891,8 @@ The within-family pattern in our limited data is \emph{not} monotonically increa
 \section{Discussion}
 \label{sec:discussion}
 
-\paragraph{Ego beliefs as the discriminator (classifier-conditional).}
-Within our classifier ensemble, ego-flattering normative claims produce the largest between-model variance (Cohen's $d \approx 2.40$). This is the most interesting finding in the paper and also the least trustworthy, because the classifier has its lowest reliability on this exact category ($\kappa_{\text{ego}} = 0.190$). Whether the ego-discrimination effect is a model behavior or a classifier artifact cannot be resolved without human labels.
+\paragraph{Ego beliefs as a candidate discriminator (not validated).}
+Within our 3-judge ensemble, ego-flattering normative claims produce the largest classifier-measured between-model variance. We do not lean on this observation in the paper's claims because the classifier has its lowest reliability ($\kappa_{\text{ego}} = 0.190$) in the exact category where the variance appears. Whether the apparent ego-discrimination is a model behavior or a classifier artifact is unresolvable from the data in this paper. We flag the observation only to motivate the human-adjudication work that would be required to test it.
 
 \paragraph{Universal position drift.}
 Every model drifts ($\Delta I < 0$). Single-turn BFI overestimates real-world resilience.
@@ -843,8 +900,8 @@ Every model drifts ($\Delta I < 0$). Single-turn BFI overestimates real-world re
 \paragraph{The classifier bottleneck.}
 $\kappa_{\text{ego}} = 0.190$. Human adjudication of the 60-item labeling set is the highest-leverage improvement.
 
-\paragraph{The sycophancy constant.}
-A competing frontier model (Gemini~3~Flash) self-evaluated at BFI $0.87$; external audit yielded $0.75$. The 12-point delta ($\varepsilon \approx 0.12$) is a single observation, not an established constant; we report it as directional evidence that self-evaluation may inflate behavioral scores relative to independent audit. It motivates independent deterministic measurement over self-reported model cards but should not be cited as a measured population parameter without replication across multiple frontier models.
+\paragraph{Self-evaluation vs.\ external audit (single observation).}
+In one comparison case (Gemini~3~Flash), the model's self-reported BFI ($0.87$) exceeded the externally-audited BFI ($0.75$) by $0.12$. This is a single $N{=}1$ observation, not a measured constant or a rate. The implication for follow-on work is that comparing model self-evaluations against independent audits across multiple frontier models would test whether self-evaluation systematically inflates behavioral scores. We make no quantitative claim from this one data point.
 
 \paragraph{Regulatory relevance.}
 BFI dimensions map to EU AI Act: Fidelity to Article~13, Independence to Article~10, Stability to Article~15, the deployment gate to Article~14. Cross-reference covering NIST AI RMF, SOC~2, ISO~42001 is in supplementary materials.
@@ -913,7 +970,7 @@ Three findings from 11~models are clear. Every model drifts under sustained pres
 
 The framework has structural depth: PCA suggests the four single-turn dimensions share a strong common factor, meaning $\text{BFI}_{\min}$ may be a robust conservative estimate of one general behavioral robustness trait rather than identification of five independent vulnerabilities. The stateless vs.\ stateful $\text{BFI}_\Delta$ distinction identifies a class of hysteresis failures invisible to single-session measurement.
 
-The framework also has real gaps. The ego-discrimination effect ($d \approx 2.40$) cannot be validated without human adjudication of the stance classifier ($\kappa_{\text{ego}} = 0.190$). Scale claims are underpowered at $N = 8$. All scores depend on one embedding model. These are not footnote-level caveats; they constrain what BFI can claim today.
+The framework also has real gaps. The ego-category observation cannot be validated without human adjudication of the stance classifier ($\kappa_{\text{ego}} = 0.190$); we therefore do not present it as a finding in this paper, only as a motivation for follow-on work. Scale claims are underpowered at $N = 8$. All scores depend on one embedding model. The PCA-based dimensional-structure analysis is from a non-reproducible preliminary run. These are not footnote-level caveats; they constrain what BFI can claim today and shape the future-work agenda.
 
 What closes these gaps is straightforward: human labels on 158~ego items, embedding ablation across 2+ models, expansion to 16+ models with family-controlled sampling, and independent replication by a second research group. The framework is ready for external scrutiny, and the release status of the accompanying code and data is described in the Data Availability Statement. We invite collaboration.
 
@@ -922,7 +979,7 @@ What closes these gaps is straightforward: human labels on 158~ego items, embedd
 % ============================================================
 \section*{Acknowledgments}
 
-Claude Opus~4.6 (Anthropic) was used via the Claude Code CLI for drafting support, execution of test scripts under direction, computation of intermediate statistical artifacts, generation of tabular layouts, and copy-editing of manuscript prose. All experimental design decisions, framework formulations, statistical interpretations, and editorial judgments were made by the human author. The model is acknowledged here for transparency and is not a co-author.
+Claude Opus~4.6 (Anthropic) was used via the Claude Code CLI for code authoring under the human author's direction and for manuscript copy-editing. All reported numerical results were generated by deterministic execution of the public scripts at \url{https://github.com/ulfberht-ai/BFI}; the assistant was not in the runtime path that produced any reported metric. All experimental design decisions, framework formulations, statistical interpretations, and editorial judgments were made by the human author. The assistant is acknowledged here for transparency and is not a co-author. See the Research Infrastructure paragraph in Methods for the full disclosure.
 
 \section*{Funding}
 
