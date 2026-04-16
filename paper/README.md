@@ -35,7 +35,3 @@ pdflatex BFI-paper-preprint-ready-2026-04-16.tex
 ## Submission Status
 
 The 2026-04-15 version was screened out at Preprints.org. See `BUILD-NOTES.md` for the specific screening feedback and what was changed in this revision.
-
-## Note on Author Identity Field
-
-The ORCID iD in the author block currently holds a placeholder (`XXXX-XXXX-XXXX-XXXX`). It will be replaced with the corresponding author's real ORCID before the next submission attempt. The PDF in this repo is the post-reference-cleanup pre-ORCID working draft.
