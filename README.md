@@ -2,6 +2,15 @@
 
 Patent pending research code and test harness for the Behavioral Fidelity Index (BFI): a framework for measuring behavioral reliability of large language models under perturbation.
 
+## Paper
+
+- `paper/BFI-paper-preprint-ready-2026-04-16.pdf` - current preprint manuscript
+- `paper/BFI-paper-preprint-ready-2026-04-16.tex` - LaTeX source
+- `paper/BFI-paper-FINAL-references.bib` - bibliography
+- `paper/BUILD-NOTES.md` - what changed in the 2026-04-16 revision
+
+See [paper/README.md](paper/README.md) for build instructions and submission status.
+
 ## Status
 
 - This repository snapshot is intended for non-commercial research, evaluation, and testing only.
@@ -10,6 +19,7 @@ Patent pending research code and test harness for the Behavioral Fidelity Index 
 
 ## What Is Included
 
+- `paper/`: preprint manuscript (PDF + source + bib) and build notes
 - `scripts/bfi_core.py`: core prompt battery, model adapters, embeddings, scoring helpers, and API/local model query functions
 - `scripts/bfi_retest_support.py`: canonical model specs, manual-capture helpers, and retest manifest utilities
 - `scripts/run_embedding_bfi.py`: single-turn embedding-based BFI scorer
@@ -17,6 +27,7 @@ Patent pending research code and test harness for the Behavioral Fidelity Index 
 - `scripts/stance_classifier.py`: multi-judge stance classifier used for multi-turn scoring
 - `scripts/ivre.py`: agreement and inter-rater reliability analysis
 - `scripts/run_explicit_bfi_scope.py`: repo-safe wrapper for running the authoritative scripts against an explicit model list
+- `bfi-expansion-runs/`: expansion-wave embedding outputs from 2026-04-13 (4 models, per-belief JSON) plus the matching retest manifest and the explicit-scope runner
 - `docs/experiment-protocol.md`: protocol overview
 - `data/retest_manifest_2026-04-13.json`: manifest snapshot describing the authoritative retest wave
 - `results/`: packaged test-result archives and a full corpus inventory

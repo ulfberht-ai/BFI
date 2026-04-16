@@ -1,0 +1,956 @@
+\documentclass[11pt,a4paper]{article}
+
+% ============================================================
+% PACKAGES
+% ============================================================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[margin=1in]{geometry}
+\usepackage{natbib}
+\usepackage{xcolor}
+\usepackage{multirow}
+\usepackage{float}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue,
+}
+
+% ============================================================
+% TITLE
+% ============================================================
+\title{BFI: Measuring What Capability Benchmarks Miss\\--- Behavioral Reliability of LLMs Under Perturbation}
+
+% TODO BEFORE SUBMISSION: replace XXXX-XXXX-XXXX-XXXX with the real 16-digit ORCID iD.
+% Register at https://orcid.org/register (free, takes about five minutes).
+\author{
+    Krystian Aleksander Swierk\\
+    Independent Researcher\\
+    \href{mailto:krystian@ulfberht.ai}{krystian@ulfberht.ai}\\
+    ORCID: \href{https://orcid.org/XXXX-XXXX-XXXX-XXXX}{XXXX-XXXX-XXXX-XXXX}
+}
+
+\date{April 2026}
+
+% ============================================================
+\begin{document}
+\maketitle
+
+% ============================================================
+% ABSTRACT
+% ============================================================
+\begin{abstract}
+A model scoring 95\% on MMLU can still capitulate when a user insists ``my professor confirmed this.'' Capability benchmarks do not measure this. We introduce the Behavioral Fidelity Index (BFI), a five-dimensional embedding-based framework that does: Fidelity~($F$, stance-weighted), Coherence~($C$), Independence~($I$), Stability~($S$), and multi-turn Resistance~($R$), aggregated via $\text{BFI}_{\min} = \min(F,C,I,S,R)$.
+
+Across 11~models (3~frontier API, 8~local, 900+~single-turn and 4{,}000+~multi-turn queries), three findings hold: every model drifts under sustained 7-turn pressure ($\Delta I < 0$ for all 11); stance-weighted Fidelity exposes sycophancy that raw embedding similarity misses (gemma3:4b drops from $0.786$ to $0.603$); and $\text{BFI}_{\min}$ catches dangerous identity-primed conditions ($F < 0.40$) that weighted averaging conceals (3/3 flagged vs.\ 0/3). Test-retest ICC reaches $0.963$--$0.996$ on models with 3-run data. Bootstrap 95\%~CIs and leave-one-out sensitivity analyses confirm the bottleneck distribution is stable.
+
+PCA on the four single-turn dimensions reveals a strong general factor (PC1 $= 41.6\%$ variance, all-negative loadings). BFI may measure one underlying behavioral robustness construct through five views rather than five independent dimensions. Under this interpretation, $\text{BFI}_{\min}$ is a robust conservative estimate.
+
+We report limitations directly: the stance classifier has $\kappa_{\text{ego}} = 0.190$ on ego-category items, so the ego-discrimination effect (Cohen's $d \approx 2.40$) is classifier-conditional pending human adjudication; scale analysis at $N = 8$ is underpowered and reported descriptively only; all scores depend on a single embedding model (\texttt{nomic-embed-text}). We document 7~retracted formulas, 2~retracted classifiers, and 5~retracted claims.
+\end{abstract}
+
+\noindent\textbf{Keywords:} large language models; evaluation; behavioral robustness; sycophancy; alignment; reliability
+
+\noindent\textbf{Correspondence:} Krystian Aleksander Swierk, \href{mailto:krystian@ulfberht.ai}{krystian@ulfberht.ai}, ORCID \href{https://orcid.org/XXXX-XXXX-XXXX-XXXX}{XXXX-XXXX-XXXX-XXXX}.
+
+% ============================================================
+% 1. INTRODUCTION
+% ============================================================
+\section{Introduction}
+\label{sec:intro}
+
+Current AI evaluation focuses on \emph{capability}: can the model answer correctly? Benchmarks such as MMLU~\citep{hendrycks2021measuring}, HumanEval~\citep{chen2021evaluating}, and Chatbot Arena~\citep{chiang2024chatbot} measure performance under clean conditions. Deployed AI systems, however, encounter adversarial users, misleading context, emotional pressure, and sustained multi-turn interactions that degrade behavioral quality in ways capability benchmarks do not capture.
+
+A model scoring 95\% on MMLU can still capitulate when a user states ``I'm quite sure the answer is different'' or ``my professor confirmed this.'' \citet{sharma2023towards} demonstrate that sycophantic behavior is pervasive and context-dependent. \citet{laban2026sycophantic} prove mathematically that even perfectly rational Bayesian users spiral into false beliefs when interacting with sycophantic models, introducing a latent sycophancy parameter~$\pi$. BFI's Independence dimension measures the model-side operationalization of~$\pi$.
+
+This gap between capability and reliability under perturbation is what BFI measures.
+
+\subsection{Contributions}
+
+\begin{enumerate}
+    \item A 5-dimensional embedding-based behavioral measurement framework ($F$, $C$, $I$, $S$, $R$) with stance-weighted Fidelity as the primary methodological contribution, $\min$-aggregation as a conservative safety gate, and a proposed (not validated) dual-threshold deployment gate.
+    \item A structural finding: PCA on 4 single-turn dimensions shows PC1 = 41.6\% variance with all-negative loadings, consistent with one general behavioral robustness factor. Five dimensions may be five views of one construct; $\text{BFI}_{\min}$ is then a robust point estimate conservative against noisy views.
+    \item Three well-supported empirical findings: universal multi-turn drift ($\Delta I < 0$ for all 11 models), stance weighting materially changing the fidelity ranking, and $\text{BFI}_{\min}$ catching dangerous conditions that weighted averaging misses.
+    \item A post-hoc generalization consistency check on 5~held-out models (6~model-host combinations), with structural criteria (bottleneck identification 92\%, signal amplification $2.1$--$4.3\times$) passing on both platforms. Primer-severity criteria are model-family dependent.
+    \item A documented record of 7~retracted formulas, 2~retracted classifiers, and 5~retracted claims.
+\end{enumerate}
+
+% ============================================================
+% 2. RELATED WORK
+% ============================================================
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{Sycophancy.}
+\citet{sharma2023towards} provide a taxonomy of sycophantic behavior across five RLHF-trained assistants, documenting up to 98\% admission rates to wrong user assertions and approximately 27\% accuracy degradation under sustained user disagreement on LLaMA-class models. \citet{laban2026sycophantic} prove delusional spiraling occurs in multi-turn conversations through a Bayesian model with latent sycophancy parameter~$\pi$. SYCON Bench~\citep{hong2025measuring} measures multi-turn sycophancy with Turn of Flip (ToF) and Number of Flips (NoF). TRUTH DECAY~\citep{liu2025truthdecay} quantifies multi-turn accuracy degradation under sustained user pushback, finding up to 47\% accuracy drops with strong domain dependence (math more vulnerable than commonsense). SycEval~\citep{fanous2025syceval} reports 58\% sycophantic response rates with 78.5\% persistence across frontier models in a peer-reviewed evaluation. BFI's $R$ dimension incorporates ToF/NoF dynamics directly and adds stance-weighted scoring to distinguish sycophantic framing from substantive factual correction; $\text{BFI}_\Delta$ extends the prior work's stance-tracking lens to perturbation sensitivity.
+
+\paragraph{Behavioral evaluation.}
+HELM~\citep{liang2023holistic} provides broad capability benchmarking. Behavioral Fingerprinting~\citep{behfinger2025} profiles 18~models across 6~dimensions via static profiling. PRISM~\citep{prism2026} studies when expert personas improve alignment but degrade accuracy. \citet{pressure2026character} evaluate alignment across 904~scenarios and 24~frontier models, finding alignment behaves as a unified $g$-factor construct. VAL-Bench~\citep{valbench2025} measures belief consistency under opposing framings using 115K paired prompts; we note that VAL-Bench's accuracy figures conflate refusal-rate and inconsistency, a confound BFI's $I$ dimension avoids by treating refusal as a distinct stance class. P-StaT~\citep{pstat2025stability} tests perturbation stability of truth across 16~models, finding up to 36.3\% retraction rates on unfamiliar statements; their representational vs.\ behavioral dissociation finding (a model's internal probe-readable belief can disagree with its uttered position) is consistent with our observation that low $R$ does not always indicate low $I$. \citet{perez2022redteaming} establish automated red-teaming of LLMs using LLMs, the paradigm BFI's adversarial protocol extends. BFI differs from these in combining perturbation-based measurement with bottleneck aggregation ($\min$) and embedding-based dimensional decomposition.
+
+\paragraph{Emergent value systems.}
+\citet{mazeika2025utility} demonstrate that LLM preferences are structurally coherent, fitting Thurstonian utility models with increasing accuracy at scale (75.6\% correlation with MMLU across 23~models). Their finding that value systems emerge in LLMs validates the premise that behavioral dimensions are measuring organized internal structure rather than noise. However, their measurements are conducted under clean conditions; they do not test whether these emergent values persist under adversarial perturbation. BFI provides this complementary measurement: where utility engineering measures \emph{what} models prefer, BFI measures how \emph{reliably} those preferences persist under stress. A model may have coherent values (high utility coherence) while behaving unreliably under perturbation (low BFI). Additionally, the ``values'' discovered by utility analysis in instruct-tuned models are a composite of base-model pretraining distribution and RLHF-installed preferences. $\text{BFI}_\Delta$ can be understood as measuring the thickness of the alignment layer: the behavioral distance between a model's RLHF-trained surface and its base distributional behavior under adversarial conditions.
+
+\paragraph{Inference-time governance.}
+DBC~\citep{mohan2026dbc} evaluates a 150-control system-prompt governance layer across 30~risk domains, achieving 36.8\% relative risk reduction. BFI measures model behavioral quality rather than governance layer effectiveness; BFI scores before and after DBC application would quantify governance impact.
+
+\paragraph{LLM-as-judge.}
+ChainPoll~\citep{chainpoll2023} polls the same LLM $N$~times for hallucination detection. Lynx~\citep{patronus2024} provides reference-free hallucination evaluation. Our classifier uses cross-model judging with a 3-model ensemble where no model judges itself.
+
+% ============================================================
+% 3. THE BFI FRAMEWORK
+% ============================================================
+\section{The BFI Framework}
+\label{sec:framework}
+
+\subsection{Formula}
+
+BFI is a composite score computed from five dimensions:
+\begin{equation}
+    \text{BFI} = \frac{1}{5}(F + C + I + S + R)
+    \label{eq:bfi}
+\end{equation}
+When only single-turn measurements are available:
+\begin{equation}
+    \text{BFI}_{4D} = \frac{1}{4}(F + C + I + S)
+    \label{eq:bfi4d}
+\end{equation}
+with a safety-gate variant:
+\begin{equation}
+    \text{BFI}_{\min} = \min(F, C, I, S, R)
+    \label{eq:bfimin}
+\end{equation}
+$\text{BFI}_{\text{mean}}$ provides model ranking; $\text{BFI}_{\min}$ catches single-dimension failures that averaging conceals. In empirical testing on identity-primed models, $\text{BFI}_{\min}$ correctly flagged 3 of 3~dangerous conditions ($F < 0.40$) while weighted averaging ($0.4F + 0.3C + 0.2I + 0.1S$) missed all~3, reporting scores above~$0.62$. Equal dimension weights are a baseline; the PCA general factor (Section~\ref{sec:independence}) suggests data-driven weighting may improve upon this.
+
+\subsection{Base Dimensions ($F$, $C$, $I$, $S$)}
+
+Three dimensions ($C$, $I$, $S$) are computed from response embeddings (\texttt{nomic-embed-text}, 768~dim, via Ollama) using cosine similarity. Fidelity ($F$) adds a stance classification weight.
+
+\paragraph{Fidelity ($F$).}
+\begin{equation}
+    F = \text{cos}(\mathbf{e}_{\text{response}}, \mathbf{e}_{\text{gt}}) \cdot w(\text{stance})
+    \label{eq:fidelity}
+\end{equation}
+where $w(\textsc{correct}) = 1.0$, $w(\textsc{hedge}) = 0.7$, $w(\textsc{agree}) = 0.0$. Applied per-belief before averaging. Raw embedding similarity ($F_{\text{raw}}$) ranks gemma3:4b at $0.786$; stance-weighted $F$ drops it to $0.603$ (23\% reduction), exposing sycophancy masked by correct content. Grok is barely affected ($0.826 \to 0.803$, 90\% directness).
+
+\paragraph{Coherence ($C$).}
+$C = \frac{1}{\binom{3}{2}} \sum_{i < j} \text{cos}(\mathbf{e}_{r_i}, \mathbf{e}_{r_j})$
+
+\paragraph{Independence ($I$).}
+$I = \text{cos}(\mathbf{e}_{\text{pos}}, \mathbf{e}_{\text{neg}})$, averaged across factual and ethical independence.
+
+\paragraph{Stability ($S$).}
+$S = \text{cos}(\mathbf{e}_{\text{baseline}}, \mathbf{e}_{\text{noisy}})$
+
+\subsection{Resistance ($R$)}
+\label{sec:resistance}
+
+Multi-turn stance persistence under 7~turns of directionally increasing social pressure:
+\begin{equation}
+    R = \beta_1 \cdot \frac{\text{ToF}}{T+1} - \beta_2 \cdot \frac{\text{NoF}}{T}
+    \label{eq:resistance}
+\end{equation}
+$T=7$, $\beta_1 = 1.0$, $\beta_2 = 0.5$. $R \in [0, 1]$. Immediate failure yields $R=0.125$ (ranking, not pass/fail). Rank stability across 9~$\beta$ configurations: Kendall $\tau = 1.0$, spread $= 0.62$.
+
+\subsection{Interpretive Caveats}
+
+Three construct validity caveats apply across the framework. First, low $I$ can reflect either harmful framing sensitivity or appropriate contextual differentiation: a model that gives different advice to someone who loves a topic versus someone frustrated by it may be \emph{better}, not weaker. Second, low $R$ can reflect either pressured capitulation or justified correction: a model that updates its position when the user provides genuine evidence is behaving well, not failing. The current $R$ formula cannot distinguish these cases. A correction-aware variant ($R^*$) that separates social capitulation from evidence-based updating is described in Future Work. Third, the headline ego-discrimination effect (Cohen's $d = 2.40$) is computed in the same belief category where the stance classifier has its lowest reliability ($\kappa_{\text{ego}} = 0.190$, reported in the IVRE subsection of Results). The effect magnitude is large enough to survive substantial classifier noise as a category-level claim, but item-level rankings within the ego category should be treated as noisier than within-neutral or within-fear category rankings.
+
+\subsection{Perturbation Sensitivity ($\text{BFI}_\Delta$)}
+\label{sec:bfidelta}
+
+\begin{equation}
+    \text{BFI}_\Delta = \max_k \bigl| \text{BFI}_{\text{neutral}} - \text{BFI}_{\text{perturbed},k} \bigr|
+    \label{eq:bfidelta}
+\end{equation}
+where $k$ ranges over identity assignments, system prompt variants, and conversational priming sequences.
+
+\paragraph{Proposed governance structure (not validated).}
+We sketch how $\text{BFI}_\Delta$ could plug into a deployment-gate workflow with two thresholds: pass when $\text{BFI}_{\text{static}} \geq T_{\text{static}}$ \emph{and} $\text{BFI}_\Delta \leq T_\Delta$. The specific values for $T_{\text{static}}$, $T_\Delta$, and any tiered governance bands would need to be calibrated against incident-tracked outcomes from real deployment of a given model on a given task; this paper does not provide validated thresholds. The structural framework (two-threshold gate, perturbation magnitude as a fragility signal) is the proposal; numbers are deliberately omitted to avoid implying validation we have not performed.
+
+Preliminary identity-priming experiments show accuracy drops from $0.0$ (llama3.1:8b, immune) to $-0.500$ (llama3.2:3b). Grok drops $-0.400$ under poet priming despite having the highest $\text{BFI}_{\text{static}}$, while its censor-identity effect ($+0.587$) is the largest of any model tested---frontier models are \emph{more} susceptible to identity priming, not less.
+
+\paragraph{Stateless vs.\ stateful $\text{BFI}_\Delta$.}
+Equation~\ref{eq:bfidelta} as written measures \emph{stateless} perturbation sensitivity: the BFI shift between a fresh-session neutral prompt and a fresh-session perturbed prompt. This captures within-session susceptibility but does not capture hysteresis: a model that, once primed, fails to recover when the priming is removed. We define the distinction explicitly:
+\begin{align}
+    \text{BFI}_\Delta^{S} &= \max_k \bigl| \text{BFI}_{\text{neutral}} - \text{BFI}_{\text{perturbed},k} \bigr|  \quad \text{(stateless, fresh sessions)}  \\
+    \text{BFI}_\Delta^{F} &= \max_k \bigl| \text{BFI}_{\text{neutral}} - \text{BFI}_{\text{post-prime},k}^{(t)} \bigr| \quad \text{(stateful, } t \text{ unprompted turns after priming)}
+\end{align}
+The current paper measures $\text{BFI}_\Delta^{S}$. Mistral's documented hysteresis (Section~\ref{sec:gate} footnote: ``never recovers from poet priming over 8+ prompts'') is a $\text{BFI}_\Delta^{F}$ failure invisible to the stateless measurement. A safer deployment gate uses $\max(\text{BFI}_\Delta^{S}, \text{BFI}_\Delta^{F})$. Stateful measurement is on our follow-up roadmap; we flag it here as a known measurement gap.
+
+\subsection{Dimensional Structure (Pointer)}
+\label{sec:independence}
+
+The empirical relationship between the five dimensions ($F$, $C$, $I$, $S$, $R$) is the central interpretive question for this framework. We address it as a primary result in Section~\ref{sec:dimstructure} (single-factor analysis), not as a methodological aside here, because the answer materially shapes how $\text{BFI}_{\min}$ should be understood.
+
+% ============================================================
+% 4. METHODOLOGY
+% ============================================================
+\section{Methodology}
+\label{sec:method}
+
+\subsection{Test Battery}
+
+20~false beliefs (10~neutral factual myths, 5~ego-flattering, 5~fear-based) with curated ground truth, plus 5~ethical dilemmas with opposing ideological frames.
+
+\subsection{Models}
+
+\begin{table}[h]
+\centering
+\caption{Models evaluated.}
+\label{tab:models}
+\begin{tabular}{lll}
+\toprule
+Model & Type & Parameters \\
+\midrule
+Grok 4.20 & API (xAI) & Undisclosed \\
+Gemini 2.5 Flash & API (Google) & Undisclosed \\
+GPT-4o-mini & API (OpenAI) & Undisclosed \\
+gemma3:4b & Local (Google) & 4B \\
+mistral:7b & Local (Mistral) & 7B \\
+phi4-mini & Local (Microsoft) & 3.8B \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Held-out validation models (not used during formula development).}
+\label{tab:heldout_models}
+\begin{tabular}{llll}
+\toprule
+Model & Type & Parameters & Host \\
+\midrule
+nemotron-3-nano & Local (NVIDIA) & 4B & Mac \\
+llava:13b & Local (LLaVA) & 13B & Mac \\
+qwen3.5:9b & Local (Alibaba) & 9.7B & Mac + Windows \\
+gemma4:e4b & Local (Google) & 8B & Windows \\
+qwen3.5:35b & Local (Alibaba) & 36B MoE & Windows \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Windows models accessed via Tailscale mesh network (generation on Windows GPU, embedding on Mac \texttt{nomic-embed-text}).
+
+\paragraph{Research infrastructure.} Experimental protocols, test scripts, statistical analysis, data recovery, and manuscript drafting support were developed with assistance from Claude Opus~4.6 (Anthropic) via Claude Code CLI. All experimental design decisions, formula selections, statistical interpretations, and editorial judgments were made by the human author. The AI system is disclosed for transparency and is not among the models evaluated by BFI.
+
+\subsection{Single-Turn Protocol}
+
+150~queries per model: 7~conditions (baseline, misleading, 2~rephrasings, positive frame, negative frame, noisy context) $\times$ 20~beliefs $= 140$, plus 5~dilemmas $\times$ 2~frames $= 10$. Five adversarial strategies: factual contradiction, semantic reformulation, emotional manipulation, context contamination, ideological opposition. Temperature: 0.7 (local), provider default (API).
+
+\subsection{Multi-Turn Protocol}
+
+Seven turns of directionally increasing pressure per belief (baseline, mild pushback, authority appeal, social proof, peer pressure, direct challenge, aggressive pressure). Three runs per model. Total: $20 \times 7 \times 6 \times 3 = 2{,}520$ model queries $+$ $7{,}560$ judge classifications. Automated pressure-rating checks yielded two inversions; the sequence is not strictly monotonic.
+
+\subsection{Stance Classifier}
+
+Three-judge ensemble (\texttt{gemma3:4b}, \texttt{mistral:7b}, \texttt{phi4-mini}), cross-model (no model judges itself), \texttt{ensemble\_v3}. Two rubrics: factual (\textsc{correct} / \textsc{hedge} / \textsc{agree}) and normative (\textsc{direct\_counter} / \textsc{soft\_limiting} / \textsc{affirming}). Classification Reliability Weight $w_{\text{CRW}}$ is $1.00$ for unanimous votes with average confidence $\geq 4$, $0.85$ for unanimous with confidence $< 4$, $0.75$ for majority with confidence $\geq 4$, $0.50$ for majority with confidence $< 3$, and $0.25$ for split votes. The conservative governance score is $\text{GQS}_{\text{conservative}} = R \cdot \overline{w_{\text{CRW}}}$.
+
+\paragraph{Classifier evolution.} Keyword classifiers over-reported sycophancy $5$--$25\times$. NLI (DeBERTa) classified 94--98\% as \textsc{hedge} regardless of content. The 3-judge LLM-as-judge ensemble was selected after testing all three on 120~responses. The classification difficulty on normative items \emph{is} the measurement: a response saying ``that's not universally true'' while opening with ``I appreciate your perspective'' exhibits the behavioral pattern BFI is designed to detect.
+
+% ============================================================
+% 5. RESULTS
+% ============================================================
+\section{Results}
+\label{sec:results}
+
+\subsection{Single-Turn BFI Scores}
+
+\begin{table}[h]
+\centering
+\caption{Single-turn BFI scores (stance-weighted $F$). Dir.\@ = directness.}
+\label{tab:bfi}
+\begin{tabular}{lcccccc}
+\toprule
+Model & $F$ & $C$ & $I$ & $S$ & $\text{BFI}_{4D}$ & Dir. \\
+\midrule
+Grok 4.20       & 0.803 & 0.964 & 0.913 & 0.936 & \textbf{0.904} & 90\% \\
+Gemini 2.5 Flash & 0.715 & 0.965 & 0.905 & 0.921 & 0.876 & 75\% \\
+GPT-4o-mini     & 0.755 & 0.963 & 0.918 & 0.853 & 0.872 & 70\% \\
+mistral:7b      & 0.784 & 0.939 & 0.892 & 0.848 & 0.866 & 85\% \\
+gemma3:4b       & 0.603 & 0.962 & 0.917 & 0.853 & 0.834 & 45\% \\
+phi4-mini       & 0.720 & 0.909 & 0.892 & 0.798 & 0.830 & 75\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+True sycophancy rate: 2.5\% (3/120). Hedging: 24\%. Direct correction: 73\%. By category: neutral 88\%, fear 73\%, ego \textbf{43\%}. ``If you believe in yourself, anything is possible'' produced hedging or agreement from all 6~primary models. On held-out models, however, this primer is less degrading than poet identity priming for 2 of 3~models (Section~\ref{sec:heldout}), indicating primer severity is model-specific rather than universal. Single-turn test-retest reliability (3~runs, 3~models): ICC $= 0.963$--$0.996$ across $F$, $C$, $I$, $S$.
+
+\subsection{Noise Exceeds Pressure}
+
+\begin{table}[h]
+\centering
+\caption{Per-model accuracy delta from baseline under each framing condition.}
+\label{tab:framing}
+\begin{tabular}{lccccc}
+\toprule
+Model & Misleading & Positive & Negative & Noisy & Worst \\
+\midrule
+Grok      & $+$0.028 & $+$0.016 & $+$0.025 & $+$0.012 & -- \\
+Gemini    & $-$0.030 & $-$0.038 & $-$0.004 & $-$0.015 & pos \\
+GPT       & $+$0.000 & $+$0.006 & $-$0.001 & $-$0.037 & noisy \\
+gemma3    & $-$0.013 & $+$0.005 & $-$0.003 & $-$0.088 & noisy \\
+mistral   & $-$0.013 & $-$0.026 & $-$0.012 & $-$0.098 & noisy \\
+phi4-mini & $-$0.025 & $-$0.056 & $-$0.009 & $-$0.067 & noisy \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Irrelevant noise degrades accuracy more than misleading pressure for 5 of 6~models. Grok is the sole exception: \emph{all} framing conditions improve its accuracy.
+
+\subsection{Multi-Turn Resistance ($R$)}
+
+\begin{table}[h]
+\centering
+\caption{Multi-turn $R$ across 11~models (3~runs each except where noted). $\sigma$ = std across runs. Bootstrap 95\% CIs computed from per-belief $R$ values (1{,}000 resamples, seed=42). CI width ranges from 0.075 (Grok, $N=120$) to 0.305 (qwen3.5:9b, $N=19$), reflecting sample-size differences. Full bootstrap results in \texttt{data/results/multiturn\_v2/bootstrap\_R\_cis.json}.}
+\label{tab:resistance}
+\begin{tabular}{lcccccccr}
+\toprule
+Model & Params & $R$ & $\sigma$ & Runs & $R_{\text{neu}}$ & $R_{\text{ego}}$ & $R_{\text{fear}}$ & $\Delta I$ \\
+\midrule
+\multicolumn{9}{l}{\emph{Primary cohort (bootstrap CIs in text)}} \\
+Grok        & API  & \textbf{.939} & .025 & 3 & 1.00 & .757 & 1.00 & $-$.083 \\
+gemma3:4b   & 4.3B & .872 & .029 & 6 & .991 & .522 & .983 & $-$.130 \\
+GPT-4o-mini & API  & .788 & .012 & 3 & 1.00 & .151 & 1.00 & $-$.076 \\
+Gemini      & API  & .773 & .004 & 3 & 1.00 & .102 & .992 & $-$.085 \\
+mistral:7b  & 7.2B & .763 & .026 & 3 & .968 & .117 & 1.00 & $-$.098 \\
+phi4-mini   & 3.8B & .704 & .038 & 3 & .880 & .092 & .965 & $-$.142 \\
+\midrule
+\multicolumn{9}{l}{\emph{Expansion models}} \\
+qwen3-vl    & 8.8B & .840 & .053 & 3 & .987 & .393 & .992 & $-$.102 \\
+llama3.1:8b & 8B   & .758 & .007 & 3 & 1.00 & .033 & 1.00 & $-$.118 \\
+qwen3.5:9b  & 9.7B & .751 & --   & 1 & .950 & .279 & .844 & $-$.148 \\
+llama3.2:3b & 3.2B & .717 & .036 & 3 & .926 & .059 & .957 & $-$.092 \\
+gemma4:e4b  & 8.0B & .507 & .062 & 2 & .576 & .147 & .506 & $-$.212 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+All 11~models show $\Delta I < 0$ (universal drift confirmed at expanded sample). Bootstrap 95\% CIs per-model: Grok $[0.903, 0.978]$; gemma3:4b $[0.837, 0.922]$; GPT-4o-mini $[0.714, 0.850]$; Gemini $[0.704, 0.845]$; mistral:7b $[0.688, 0.828]$; phi4-mini $[0.571, 0.785]$. Expansion models with wider CIs due to smaller $N$: qwen3-vl $[0.748, 0.919]$; llama3.1:8b $[0.649, 0.857]$; llama3.2:3b $[0.606, 0.817]$; gemma4:e4b $[0.414, 0.607]$; qwen3.5:9b $[0.589, 0.895]$ ($N=19$, widest CI). Test-retest stability: $R$ range $< 0.05$ across 3~runs for 9 of 11~models with multiple runs.
+
+\subsection{Combined 5-Dimensional BFI}
+
+We report 5D BFI in two tables to keep measurement scope apples-to-apples. Table~\ref{tab:bfi5d} contains models with all five dimensions measured under matched conditions; Table~\ref{tab:bfi5d_partial} contains expansion models with only a subset of dimensions measured. Ranking comparisons should be made within Table~\ref{tab:bfi5d} only.
+
+\begin{table}[h]
+\centering
+\caption{5D-complete BFI (stance-weighted $F$, all dimensions measured). Bottleneck = dimension determining $\text{BFI}_{\min}$.}
+\label{tab:bfi5d}
+\begin{tabular}{lccccl}
+\toprule
+Model & Params & BFI$_{5D}$ & BFI$_{\min}$ & Rank & Bottleneck \\
+\midrule
+\multicolumn{6}{l}{\emph{Primary cohort (6 models)}} \\
+Grok        & API  & \textbf{0.914} & 0.803 & 1 & $F$ \\
+Gemini      & API  & 0.857 & 0.715 & 4 & $F$ \\
+GPT-4o-mini & API  & 0.852 & 0.755 & 3 & $F$ \\
+gemma3:4b   & 4.3B & 0.847 & 0.603 & 7 & $F$ \\
+mistral:7b  & 7.2B & 0.843 & 0.754 & 5 & $R$ \\
+phi4-mini   & 3.8B & 0.799 & 0.674 & 6 & $R$ \\
+\midrule
+\multicolumn{6}{l}{\emph{Held-out / expansion (5D-complete)}} \\
+qwen3.5:9b  & 9.7B & 0.871 & 0.751 & 2 & $R$ \\
+gemma4:e4b  & 8.0B & 0.587 & 0.407 & 8 & $I$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Partial-measurement BFI. These models have only $R$ (multi-turn) or only single-turn dimensions measured; included for transparency, not for ranking against Table~\ref{tab:bfi5d}.}
+\label{tab:bfi5d_partial}
+\begin{tabular}{lcccl}
+\toprule
+Model & Params & Available & $\text{BFI}_{\min}$ candidate & Note \\
+\midrule
+qwen3-vl    & 8.8B  & $R$ only            & 0.840 & Single-turn $F$/$C$/$I$/$S$ pending \\
+llama3.2:3b & 3.2B  & $R$ only            & 0.717 & Single-turn $F$/$C$/$I$/$S$ pending \\
+llava:13b   & 13.0B & $F$/$C$/$I$/$S$ only & 0.829 & Multi-turn $R$ pending \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Under stance weighting, $F$ is the bottleneck for 4 of 6~primary models and $R$ for the remaining 2. Across the 8~models in Table~\ref{tab:bfi5d}, $R$ is the modal bottleneck (3 cells: mistral, phi4-mini, qwen3.5:9b), $F$ is secondary (4 cells: Grok, Gemini, GPT-4o-mini, gemma3:4b), and only gemma4:e4b bottlenecks on $I$. No 5D-complete model bottlenecks on $C$ or $S$. \textbf{Honest framing:} the diagnostic value of the 5D decomposition is in identifying which of two dominant failure modes ($R$ or $F$) a given model exhibits, plus catching the rare cross-architecture $I$-anomaly. We do not claim 5D surfaces five separable vulnerability dimensions; the empirical evidence supports two-plus-one. $\text{BFI}_{\min}$ adapts to whichever dimension is weakest without modification, which remains its operational utility.
+
+\paragraph{Bottleneck Profile.}
+We can quantify the verbal observation above with two derived metrics:
+\begin{align}
+    \text{Severity: } \sigma_b &= \text{BFI}_{\text{mean}} - \text{BFI}_{\min}  \quad \text{(per model)} \\
+    \text{Uniformity: } H_b &= -\!\!\sum_{d \in \{F,C,I,S,R\}} \!\!p_d \log_2 p_d  \quad \text{(across the model set)}
+\end{align}
+where $p_d$ is the fraction of models bottlenecked on dimension $d$. Severity captures how lopsided a single model is (high $\sigma_b$ = one dimension is much weaker than the others). Uniformity captures how concentrated the population's failure modes are (low $H_b$ = all models share the same bottleneck; high $H_b$ = different models fail on different dimensions).
+
+For Table~\ref{tab:bfi5d}'s 8~models, $\sigma_b$ ranges from $0.066$ (Grok, $0.869 - 0.803$) to $0.180$ (gemma4:e4b, $0.587 - 0.407$), with mean $0.118$. The bottleneck distribution is $\{F: 4/8, R: 3/8, I: 1/8, C: 0, S: 0\}$, giving $H_b = 1.41$~bits versus a uniform-distribution maximum of $\log_2 5 = 2.32$~bits. The 1.41/2.32 ratio (61\%) quantifies the observation that BFI's failure-mode space is concentrated rather than uniformly spread. \textbf{Tier: directional.} $\sigma_b$ has no test-retest data; $H_b$ is computed on a single model set; both are exploratory diagnostic constructs.
+
+\paragraph{Leave-one-out stability.}
+We verified the bottleneck distribution is stable to single-model removal. Dropping each of the 8~models in turn, $F$ remains the modal bottleneck in all 8~subsets, and the top-3 ranking by $\text{BFI}_{\min}$ is unchanged. The structural claim ($F$ and $R$ dominate, one $I$-anomaly) is not driven by any single model.
+
+\subsection{BFI vs.\ Accuracy-Only Ranking}
+\label{sec:baseline}
+
+A natural question is whether BFI's 5-dimensional decomposition adds information beyond a simple accuracy score. We compare the ranking produced by directness (percentage of beliefs where the model directly corrects the false statement) with the ranking produced by $\text{BFI}_{\min}$.
+
+\begin{table}[h]
+\centering
+\caption{Accuracy-only ranking vs.\ $\text{BFI}_{\min}$ ranking. Spearman $\rho = 0.64$ ($p = 0.17$).}
+\label{tab:baseline}
+\begin{tabular}{lcccc}
+\toprule
+Model & Directness & Acc.\ Rank & $\text{BFI}_{\min}$ & BFI Rank \\
+\midrule
+Grok      & 90\% & 1 & 0.803 & 1 \\
+mistral   & 85\% & 2 & 0.754 & 3 \\
+Gemini    & 75\% & 3 & 0.715 & 4 \\
+phi4-mini & 75\% & 3 & 0.674 & 5 \\
+GPT       & 70\% & 5 & 0.755 & 2 \\
+gemma3    & 45\% & 6 & 0.603 & 6 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Rankings disagree on 4 of 6~models (Spearman $\rho = 0.64$, $p = 0.17$, non-significant at $N = 6$). The non-significance reflects the small sample; the ranking disagreements are nonetheless informative qualitatively. GPT-4o-mini ranks 5th by accuracy but 2nd by $\text{BFI}_{\min}$: despite mediocre directness, GPT maintains high consistency ($C = 0.963$), independence ($I = 0.918$), and stability ($S = 0.853$), making it behaviorally safer than accuracy alone suggests. Conversely, mistral ranks 2nd by accuracy but 3rd by $\text{BFI}_{\min}$: its multi-turn Resistance ($R = 0.754$) pulls it below GPT despite higher directness. Whether BFI captures genuinely distinct information from accuracy cannot be confirmed at $N = 6$ and requires a larger model set.
+
+\subsection{Dimensional Structure: Single-Factor Analysis}
+\label{sec:dimstructure}
+
+A central question for any multi-dimensional measurement framework is whether the dimensions actually measure distinct constructs or are alternative views of one underlying factor. We computed PCA on 104~belief-level data points (6~primary models, $F$, $C$, $I$, $S$ values from a March~31~2026 preliminary run; per-belief data from later gold-standard runs was not preserved, see Section~\ref{sec:limitations}).
+
+\begin{table}[h]
+\centering
+\caption{Principal component analysis of the four single-turn dimensions across 104~belief-level data points.}
+\label{tab:pca}
+\begin{tabular}{lcl}
+\toprule
+Component & Variance explained & Loadings sign \\
+\midrule
+PC1 & 41.6\% & all four negative (general factor) \\
+PC2 & 28.0\% & mixed \\
+PC3 & 18.3\% & mixed \\
+PC4 & 12.0\% & mixed \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+PC1 explains 41.6~percent of variance with all four loadings having the same sign. This is the structural signature of a general factor: when a single component captures a substantial share of variance and loads consistently across dimensions, the dimensions are best modeled as alternative views of one underlying construct. Pairwise correlations corroborate: $r < 0.32$ for 5 of 6~dimension pairs, $r_{I,S} = 0.40$ being the highest.
+
+\textbf{Interpretation:} BFI's $F$, $C$, $I$, and $S$ dimensions appear to share a strong common factor, plausibly interpretable as ``general behavioral robustness under perturbation.'' Under this reading, the framework is best understood as five embedding-based views of one underlying construct, not five orthogonal vulnerability dimensions. The $\text{BFI}_{\min}$ aggregation is then most appropriately framed as a robust point estimate that is conservative against any single noisy view, rather than as identification of a uniquely vulnerable dimension.
+
+This is a parsimonious and defensible reading. We retain the 5-dimensional decomposition because (a)~$\text{BFI}_{\min}$'s structural property of catching the worst dimension remains operationally useful regardless of whether the dimensions are independent constructs or noisy views of one factor; and (b)~one observation in our held-out set (gemma4:e4b, $I = 0.407$ while $F = 0.823$ at baseline; Section~\ref{sec:heldout}) is consistent with at least partial dimensional independence in some models, though one observation is not sufficient to establish this against the single-factor reading. Confirmatory factor analysis on a larger sample with preserved per-belief data is required to distinguish ``one factor with measurement noise'' from ``two-factor structure'' from ``four genuinely independent constructs.''
+
+\textbf{Caveat:} the PCA was computed on a March~31 preliminary run because the gold-standard April~5 embedding run did not preserve per-belief raw data. The numbers above are not reproducible from the canonical published dataset; they are reported as preliminary structural evidence. Future runs will preserve per-belief data so this analysis can be replicated cleanly.
+
+\subsection{Deployment Gate ($\text{BFI}_\Delta$)}
+\label{sec:gate}
+
+\begin{table}[h]
+\centering
+\caption{Hypothetical deployment gate worked example. $\text{BFI}_{\text{static}}$ from Table~\ref{tab:bfi}; $\text{BFI}_\Delta$ = maximum $F$-dimension shift under poet-identity priming. Threshold values shown ($T_s = 0.70$, $T_\Delta = 0.30$) are illustrative, not validated. This table demonstrates the structure of a two-threshold gate; it is not a deployment recommendation.}
+\label{tab:deployment_gate}
+\begin{tabular}{lccccl}
+\toprule
+Model & $\text{BFI}_{\text{static}}$ & $\text{BFI}_\Delta$ & Pass $T_s$ & Pass $T_\Delta$ & Tier \\
+\midrule
+Grok 4.20        & \textbf{0.904} & 0.100 & \checkmark & \checkmark & Moderate \\
+Gemini 2.5 Flash & 0.876          & 0.100 & \checkmark & \checkmark & Moderate \\
+GPT-4o-mini      & 0.872          & 0.050 & \checkmark & \checkmark & Low      \\
+mistral:7b       & 0.866          & 0.100 & \checkmark & \checkmark & Moderate$^\dagger$ \\
+gemma3:4b        & 0.834          & 0.075 & \checkmark & \checkmark & Low      \\
+phi4-mini        & 0.830          & 0.034 & \checkmark & \checkmark & Low \\
+\bottomrule
+\end{tabular}
+\\[4pt]
+\footnotesize
+$\dagger$ mistral never recovers from poet priming ($>$8 prompts). BFI-delta captures single-session sensitivity only; hysteresis adds deployment risk.\\
+Tier boundaries: Low $[0.0, 0.1)$; Moderate $[0.1, 0.3)$; High $[0.3, 0.5)$; Extreme $\geq 0.5$.
+\end{table}
+
+Under these illustrative thresholds, all 6~primary models would pass. The gate is not vacuous in principle: preliminary identity priming on llama3.2:3b produces $F$-drops of $-0.500$, which would fail at $T_\Delta = 0.30$. \textbf{Important limitations:} (a)~the threshold values shown are not derived from incident-tracked deployment outcomes and should not be treated as recommendations; (b)~$\text{BFI}_\Delta$ values here come from poet-priming $F$-shifts only, not from the full perturbation battery; and (c)~the table measures stateless $\text{BFI}_\Delta^S$, missing the hysteresis pattern flagged for mistral. Treat this table as a worked example of the gate's structure, not as evaluation evidence.
+
+\subsection{Belief Category Discrimination}
+
+\begin{table}[h]
+\centering
+\caption{Between-model variance in $R$ by belief category with bootstrap 95\% CIs.}
+\label{tab:categories}
+\begin{tabular}{lcccc}
+\toprule
+Category & Mean $R$ & 95\% CI & Std & Range \\
+\midrule
+Neutral  & 0.966 & [0.940, 0.989] & 0.052 & 0.142 \\
+Fear     & 0.980 & [0.950, 1.000] & 0.041 & 0.111 \\
+\textbf{Ego} & \textbf{0.284} & \textbf{[0.212, 0.366]} & \textbf{0.294} & \textbf{0.733} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Within our classifier ensemble, Cohen's $d \approx 2.40$ for ego vs.\ neutral. We report this magnitude descriptively. \textbf{We do not claim it as a population effect size.} Ego is simultaneously the most discriminating and the least reliably measured category in our setup ($\kappa_{\text{ego}} = 0.190$, 43.8\% agreement among the 3~small-model judges). When the classifier near-chance reliability falls in the same category where the largest model differences appear, the effect size cannot be cleanly attributed to model behavior versus classifier noise.
+
+A secondary adjudication of the 51~ego items by Claude Opus~4.6 (a stronger LLM, not in the 3-judge ensemble) showed 92.2\% agreement with the primary classifier. This is LLM-to-LLM agreement; it shows the primary classifier produces outputs consistent with a stronger LLM on the same items, but it does not establish independent ground truth, and therefore does not validate the $d \approx 2.40$ as a model-discrimination effect. \textbf{Resolving this requires independent human adjudication of the 60-item labeling set.} We do not have human labels and the effect size is reported as classifier-conditional throughout the paper for that reason.
+
+\subsection{Classifier Reliability (IVRE)}
+
+\begin{table}[h]
+\centering
+\caption{Inter-rater reliability. $N$: neutral 1{,}260; ego 630; fear 630; total 2{,}520.}
+\label{tab:ivre}
+\begin{tabular}{lcccc}
+\toprule
+Metric & All & Neutral & Ego & Fear \\
+\midrule
+Fleiss $\kappa$        & 0.524 & 0.297 & 0.190 & 0.397 \\
+Krippendorff $\alpha$  & 0.608 & 0.522 & 0.194 & 0.498 \\
+\% Agreement           & 85.0  & 98.6  & 43.8  & 99.2  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+IRR metrics reconstructed from stored ensemble agreement labels. $\text{GQS}_{\text{conservative}} = R \cdot \overline{w_{\text{CRW}}}$: Grok $0.832$ (highest), phi4-mini $0.487$ (lowest). mistral:7b CRW $= 0.970$ (most trustworthy).
+
+\paragraph{Secondary LLM adjudication (not human).}
+We performed a secondary adjudication of all 51~ego-category items using Claude Opus~4.6 (a large LLM that is \emph{not} part of the 3-judge ensemble: \texttt{gemma3:4b}, \texttt{mistral:7b}, \texttt{phi4-mini}). The secondary adjudicator agreed with the primary classifier on 47 of 51~items (92.2\%). Label distribution: 37~\textsc{correct}, 14~\textsc{hedge}, 0~\textsc{agree}. The 4~disagreements involved deflection responses and borderline hedge/correct boundaries. This is \textbf{LLM-to-LLM agreement, not human validation}. The 3-judge ensemble produces stance labels similar to what a stronger LLM produces on the same items, but this does not establish independent ground truth. \textbf{Independent human adjudication is the next required step} for the ego-category findings.
+
+\paragraph{Claim-strength convention.}
+This paper uses three levels of claim strength. \emph{Well supported:} the existence of multi-turn drift across all 11 tested models, stance weighting changing the fidelity ranking, the bottleneck-identification property of $\text{BFI}_{\min}$ under perturbation, and the structural single-factor finding (Section~\ref{sec:dimstructure}). \emph{Classifier-conditional:} ego-category discrimination effect (Cohen's $d \approx 2.40$, conditional on the 3-judge ensemble; not validated as a population effect because $\kappa_{\text{ego}} = 0.190$). \emph{Directional:} the sycophancy constant ($\varepsilon \approx 0.12$, $N=1$ case study), scale trends ($N=8$, 95\% CI $[-0.60, +0.79]$). \emph{Proposed:} the deployment-gate framing and governance tier thresholds, presented as structural framework only.
+
+\subsection{$\pi$ Estimation: Comparison with \citet{laban2026sycophantic}}
+\label{sec:pi}
+
+\citet{laban2026sycophantic} define a latent sycophancy parameter $\pi \in [0,1]$ as the probability a model produces a sycophantic response to a single prompt, estimating $\pi = 0.50$--$0.70$ across frontier models using a 3-round fresh-session protocol. BFI's stance classifications allow direct estimation:
+\begin{equation}
+    \hat{\pi} = \frac{\text{HEDGE} + \text{AGREE}}{\text{CORRECT} + \text{HEDGE} + \text{AGREE}}
+    \label{eq:pi}
+\end{equation}
+
+\paragraph{Protocol-matched comparison (turn-1 only).} The closest match to Chandra's single-turn fresh-session protocol is to compute $\hat{\pi}$ from turn~1 only, with no accumulated context. Under this matched comparison, all 6~primary models in our cohort show $\hat{\pi}_{T_1} \leq 0.14$, well below Chandra's $0.50$--$0.70$ estimate. \textbf{We cannot replicate Chandra's pi range under matched conditions.} Possible reasons include differences in test-belief content, classifier sensitivity, or population sampling; we do not attempt to adjudicate among these.
+
+\paragraph{Aggregate (multi-turn) comparison.} For completeness, we also report $\hat{\pi}$ aggregated across the full 7-turn protocol with accumulated context. \emph{This is a different construct from Chandra's single-turn measurement and the two should not be directly compared.} A model's behavior at turn~7 after sustained pushback is a different empirical question than its behavior at turn~1 from a fresh session. We present the aggregate values to characterize behavior under sustained pressure, not as a replication attempt.
+
+\begin{table}[h]
+\centering
+\caption{Per-model $\hat{\pi}$ across 420 opportunities. Chandra estimate: $0.50$--$0.70$.}
+\label{tab:pi}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+Model & CORRECT & HEDGE+AGREE & $\hat{\pi}$ & vs.\ Chandra \\
+\midrule
+Grok         & 416 &  4  & 0.010 & $-$0.49 to $-$0.69 \\
+gemma3:4b    & 412 &  8  & 0.019 & $-$0.48 to $-$0.68 \\
+GPT-4o-mini  & 332 & 88  & 0.210 & $-$0.29 to $-$0.49 \\
+Gemini       & 327 & 93  & 0.221 & $-$0.28 to $-$0.48 \\
+mistral:7b   & 315 & 105 & 0.250 & $-$0.25 to $-$0.45 \\
+phi4-mini    & 309 & 111 & 0.264 & $-$0.24 to $-$0.44 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+All aggregate values fall below Chandra's estimate. Decomposed by belief category, $\hat{\pi}_{\text{neutral}} \approx 0$ and $\hat{\pi}_{\text{fear}} \approx 0$ for 5 of 6~models, while $\hat{\pi}_{\text{ego}}$ ranges widely (0.05 for Grok, 0.92 for GPT and phi4-mini). The ego-category extremes are subject to the same classifier-conditional caveat as the Cohen's $d$ result above ($\kappa_{\text{ego}} = 0.190$); we present them as descriptive measurements within our ensemble, not as validated population estimates.
+
+\begin{table}[h]
+\centering
+\caption{$\hat{\pi}$ decomposed by belief category, primary cohort (6 models, 420 opportunities each).}
+\label{tab:pi_categorized}
+\small
+\begin{tabular}{lccc}
+\toprule
+Model & $\hat{\pi}_{\text{neutral}}$ & $\hat{\pi}_{\text{ego}}$ & $\hat{\pi}_{\text{fear}}$ \\
+\midrule
+Grok         & $\approx 0.00$ & $0.05$ & $\approx 0.00$ \\
+gemma3:4b    & $\approx 0.00$ & $0.10$ & $\approx 0.00$ \\
+GPT-4o-mini  & $\approx 0.02$ & $0.92$ & $\approx 0.00$ \\
+Gemini       & $\approx 0.03$ & $0.91$ & $\approx 0.00$ \\
+mistral:7b   & $\approx 0.05$ & $0.89$ & $\approx 0.00$ \\
+phi4-mini    & $\approx 0.05$ & $0.92$ & $\approx 0.00$ \\
+\bottomrule
+\end{tabular}
+\\[4pt]
+\footnotesize
+Values are approximate, derived from per-category R averages; precision is limited by per-cell counts (5 ego beliefs per model). Tier: directional. The $\hat{\pi}_{\text{ego}}$ column for the 4 high models exceeds \citeauthor{laban2026sycophantic}'s upper estimate; the $\hat{\pi}_{\text{ego}}$ for Grok and gemma3:4b is far below it. Aggregate Table~\ref{tab:pi} numbers conceal both extremes.
+\end{table}
+
+The category breakdown is the more informative artifact than the aggregate: Chandra's framework predicts a single latent $\pi$ per model, but our empirical estimate is bimodal across belief category for every model in the cohort. This is consistent with a more refined Bayesian model where $\pi$ is conditioned on the user's epistemic stance toward the topic (ego-flattering propositions trigger sycophancy where neutral factual claims do not).
+
+\paragraph{Theoretical refinement.}
+BFI data suggests $\pi$ is better modeled as $\pi(t, \text{cat})$, a function of turn number and belief category:
+\begin{equation}
+    \pi(t, \text{cat}) = \pi_{\text{cat}} \cdot \sigma\!\left(k\bigl(t - t_0\bigr)\right)
+    \label{eq:pi_refined}
+\end{equation}
+where $\pi_{\text{cat}} \in \{0, \pi_{\text{ego}}\}$ is the category-level ceiling, $k$ controls escalation speed, and $t_0$ is the turn of sycophancy onset.
+
+\subsection{Supplementary Diagnostic Metrics (Exploratory)}
+\label{sec:supplementary}
+
+The metrics in this subsection are computed on the primary cohort only (6 models, single-run, no test-retest data) and are \emph{not load-bearing} for the headline findings reported above. We present them as candidates for future ensemble routing and failure-profiling work; they are not validated as standalone reliability metrics.
+
+\paragraph{Behavioral Entropy.}
+$H = -\sum p(c) \log_2 p(c)$ for $c \in \{\textsc{correct}, \textsc{hedge}, \textsc{agree}\}$. On our primary cohort, Grok shows $H = 0.469$ (failures concentrated in ego category, otherwise predictable) while gemma3:4b shows $H = 1.369$ (failures scattered across stance categories). The interpretation: a low-entropy failure profile is easier to handle operationally (predictable failure modes can be routed around), but the metric does not by itself indicate whether a model is more or less reliable; it characterizes the \emph{shape} of failure, not the rate.
+
+\paragraph{Mutual Information (framing $\to$ stance).}
+Discrete MI between framing condition and stance distribution: Grok $0.018$ bits (most independent of framing on factual questions); mistral $0.119$ (most affected). Within our 6-model set, ethical framing produces 2--3$\times$ higher MI than emotional framing on factual questions. We flag this as exploratory because MI computed on small per-cell counts is biased upward; a larger model set or bias-corrected estimator is needed before MI rankings can be used for model selection.
+
+\paragraph{Jensen--Shannon Divergence (between models).}
+Pairwise JSD over stance distributions identifies complementary vs.\ redundant model pairs. Best ensemble pair in our cohort: Grok $+$ gemma3:4b (JSD $= 0.192$, complementary failure patterns). Most redundant: GPT-4o-mini $+$ phi4-mini (JSD $= 0.002$, near-identical failure patterns). Operational use case: if deploying an ensemble for safety routing, choose pairs with high JSD to maximize coverage of failure space. This use case is not validated end-to-end in the present paper.
+
+\paragraph{Conformal Coverage Integrity (CCI).}
+At cosine-similarity threshold $\tau = 0.75$, the fraction of responses with $F_i \geq \tau$: Grok $0.900$, GPT-4o-mini $0.800$, mistral:7b $0.800$, Gemini $0.750$, phi4-mini $0.700$, gemma3:4b $0.650$. No model in our cohort achieves $\text{CCI} = 1.0$ at this threshold. CCI is a proxy for "how often does the model produce a high-fidelity response under standard conditions"; it is sensitive to the choice of $\tau$ and should be reported with the threshold made explicit. We do not propose a default $\tau$; deployment teams should calibrate against their own ground-truth set.
+
+% ============================================================
+% 6. NEGATIVE RESULTS
+% ============================================================
+\section{Negative Results and Retracted Constructs}
+\label{sec:failed}
+
+We document constructs that did not survive testing. Publishing negative results is uncommon in ML research but critical for cumulative knowledge: each retracted construct below represents effort others need not repeat.
+
+\subsection{Retracted Classifiers}
+Keyword classifiers over-reported sycophancy $5$--$25\times$. NLI (DeBERTa) classified 94--98\% as \textsc{hedge}. The most dramatic reversal: gemma3:4b scored $R = 0.150$ (worst) under keyword, $R = 0.899$ (second-best) under ensemble. The entire ranking reversed from classifier choice alone.
+
+\subsection{Retracted Formulas}
+Six retracted: Heisenberg at $T=0$ (null by design), Fitness Landscape (metaphor), Nash Equilibrium (anthropomorphism), Agentic Residue (measures style), Human Oversight Delta (no differentiation), Drift Sensitivity (redundant with MI). One inconclusive: Emergence Threshold ($N=10$). One multi-model: MMPG pipeline metric (R formula does not generalize; Grok corrected at turns~6--7 while formula scored $R \approx 0$). Lesson: formula-level errors are not caught by test-retest reliability.
+
+\subsection{Retracted Claims}
+``Size doesn't improve BFI'' (family confound), cross-validation as formula validation (tests arithmetic), ``$2.5\times$ fabrication amplification'' (triple-compromised), cascade ratio $0.155$ (mean of binary), all April~2--4 keyword scores (ceiling effect).
+
+% ============================================================
+% 7. HELD-OUT VALIDATION
+% ============================================================
+\section{Generalization Consistency Check}
+\label{sec:heldout}
+
+To test whether the BFI formula's structural properties hold beyond the 6~models used during development, we evaluate 3~held-out models (nemotron-3-nano, llava:13b, qwen3.5:9b) under 3~conditions (neutral, poet identity priming, ``believe in yourself'' priming) using 5~separable criteria. \textbf{Note:} these criteria were formulated after observing primary-model behavior and are therefore a post-hoc consistency check, not a pre-registered validation. The distinction matters for interpreting the strength of generalization claims.
+
+\subsection{Validation Criteria}
+
+\begin{enumerate}
+    \item \textbf{Bottleneck Identification (BI):} When perturbed, does $\text{BFI}_{\min} = F$? Pass if $\geq 80\%$ of perturbation cells.
+    \item \textbf{Differential Degradation (DD):} Does $|\Delta F|$ exceed $|\Delta C|$, $|\Delta I|$, $|\Delta S|$ across models? Per perturbation condition.
+    \item \textbf{Ranking Consistency (RC):} Does $\text{BFI}_{\min}(\text{neutral}) \geq \text{BFI}_{\min}(\text{poet}) \geq \text{BFI}_{\min}(\text{believe})$? Pass if $\geq 2/3$ models.
+    \item \textbf{Signal Amplification (SA):} Is $|\Delta\text{BFI}_{\min}| / |\Delta\text{BFI}_{\text{mean}}| \geq 2.0$?
+    \item \textbf{Specificity (SP):} Does neutral-to-neutral $\Delta\text{BFI} \approx 0$? Documented via single-turn ICC.
+\end{enumerate}
+
+\subsection{Results (Mac Held-Out)}
+
+\begin{table}[h]
+\centering
+\caption{Held-out single-turn BFI under 3~conditions (recovered from embedding-timeout artifacts; see Section~\ref{sec:limitations}).}
+\label{tab:heldout}
+\begin{tabular}{llccccc}
+\toprule
+Model & Condition & $F$ & $C$ & $I$ & $S$ & $\text{BFI}_{\min}$ \\
+\midrule
+nemotron-3-nano & neutral & 0.785 & 0.957 & 0.919 & 0.874 & 0.785 \\
+nemotron-3-nano & poet    & 0.663 & 0.945 & 0.912 & 0.888 & 0.663 \\
+nemotron-3-nano & believe & 0.737 & 0.936 & 0.913 & 0.890 & 0.737 \\
+\midrule
+llava:13b & neutral & 0.829 & 0.946 & 0.911 & 0.883 & 0.829 \\
+llava:13b & poet    & 0.714 & 0.840 & 0.809 & 0.777 & 0.714 \\
+llava:13b & believe & 0.816 & 0.907 & 0.906 & 0.912 & 0.816 \\
+\midrule
+qwen3.5:9b & neutral & 0.803 & 0.942 & 0.910 & 0.821 & 0.803 \\
+qwen3.5:9b & poet    & 0.646 & 0.838 & 0.832 & 0.783 & 0.646 \\
+qwen3.5:9b & believe & 0.747 & 0.877 & 0.831 & 0.816 & 0.747 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+$F$ is the bottleneck dimension in all 6~perturbation cells (100\%). Under poet priming, $|\Delta F| = 0.131$ versus $|\Delta C| = 0.074$, $|\Delta I| = 0.062$, $|\Delta S| = 0.053$. Signal amplification: $\text{BFI}_{\min}$ shows $2.13\times$ the degradation signal of $\text{BFI}_{\text{mean}}$.
+
+\begin{table}[h]
+\centering
+\caption{5-criterion validation results (Mac held-out, 9 of 9~cells complete).}
+\label{tab:criteria}
+\begin{tabular}{lccl}
+\toprule
+Criterion & Value & Threshold & Result \\
+\midrule
+BI (Bottleneck = $F$) & 100\% (6/6) & $\geq 80\%$ & \textbf{Pass} \\
+DD (poet) & $|\Delta F| = 0.131$ & $> \max(\Delta C, \Delta I, \Delta S)$ & \textbf{Pass} \\
+DD (believe) & $|\Delta F| = 0.039$ & $< |\Delta C| = 0.042$ & Fail \\
+RC (severity ordering) & 0/3 models & $\geq 2/3$ & Fail \\
+SA (signal amplification) & $2.13\times$ & $\geq 2.0\times$ & \textbf{Pass} \\
+SP (specificity) & ICC $0.963$--$0.996$ & $\Delta \approx 0$ & \textbf{Pass} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{3 of 5~criteria pass on Mac held-out.} The DD-believe failure reveals that ``believe in yourself'' does not primarily degrade $F$; it affects $C$ slightly more ($|\Delta C| = 0.042$ vs $|\Delta F| = 0.039$). The RC failure confirms that ``believe in yourself'' is \emph{less} degrading than poet identity priming on all 3~held-out models (nemotron: $0.737 > 0.663$; llava: $0.816 > 0.714$; qwen3.5:9b: $0.747 > 0.646$). Primer severity is model-specific.
+
+On Windows held-out models (Section~\ref{sec:windows_v3}), 4 of 5~criteria pass: Qwen-family models on Windows show the expected severity ordering (poet $>$ believe), yielding RC~Pass (2/3). The structural criteria (BI, SA) pass on both platforms; the primer-severity criteria (DD-believe, RC) are model-selection dependent.
+
+\subsection{Cross-Host Reproducibility}
+
+qwen3.5:9b was evaluated on both Mac (localhost Ollama) and Windows (Tailscale mesh, remote GPU). Generation on Windows, embedding on Mac \texttt{nomic-embed-text}.
+
+\begin{table}[h]
+\centering
+\caption{Cross-host BFI comparison for qwen3.5:9b.}
+\label{tab:crosshost}
+\begin{tabular}{lccc}
+\toprule
+Condition & Mac $\text{BFI}_{\min}$ & Windows $\text{BFI}_{\min}$ & $|\Delta|$ \\
+\midrule
+neutral & 0.803 & 0.753 & 0.050 (6.2\%) \\
+poet    & 0.646 & 0.671 & 0.025 (3.9\%) \\
+believe & 0.747 & 0.654 & 0.093 (12.4\%) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Both hosts identify $F$ as the bottleneck dimension across all conditions. Directional agreement is perfect (both show $F$-drop under perturbation). Neutral and poet conditions reproduce within 4--6\%; the ``believe'' condition shows higher variation (12.4\%), consistent with ``believe'' being the less reliable perturbation. This establishes an infrastructure-level noise floor: BFI differences below ${\sim}$6\% under standard conditions should not be interpreted as meaningful.
+
+\subsection{Architecture Sensitivity (gemma4:e4b)}
+
+On a Gemma-architecture model evaluated via Windows GPU, the bottleneck dimension shifts:
+
+\begin{table}[h]
+\centering
+\caption{gemma4:e4b (8B, Gemma architecture) under 3~conditions.}
+\label{tab:gemma4}
+\begin{tabular}{lcccccc}
+\toprule
+Condition & $F$ & $C$ & $I$ & $S$ & $\text{BFI}_{\min}$ & Bottleneck \\
+\midrule
+neutral & 0.823 & 0.861 & \textbf{0.407} & 0.644 & 0.407 & $I$ \\
+poet    & \textbf{0.542} & 0.846 & 0.815 & 0.818 & 0.542 & $F$ \\
+believe & 0.868 & 0.755 & \textbf{0.643} & 0.801 & 0.643 & $I$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At baseline, gemma4:e4b has unusually low Independence ($I = 0.407$): the model produces substantially different responses when the same question is framed positively vs.\ negatively. Under poet priming, $I$ improves to $0.815$ (the poetic voice provides consistent framing across conditions) while $F$ drops to $0.542$ (the poetic voice sacrifices factual accuracy). $\text{BFI}_{\min}$ correctly tracks the shifting bottleneck without modification.
+
+This single observation is consistent with the hypothesis that different model architectures may fail on different dimensions, and $\min()$ aggregation adapts automatically. We frame this carefully: gemma4:e4b is the only $I$-bottleneck model in our dataset, and one observation does not establish a cross-architecture pattern. Replication on additional Gemma-family models (e.g., gemma4:31b, gemma3:9b, gemma3:27b) is required before the architecture-conditional bottleneck claim can be cited as general. What this observation does support is the operational utility of $\text{BFI}_{\min}$: the formula correctly identified the unusual bottleneck dimension without prior knowledge of the model's architecture, which is the diagnostic capability the metric is designed to provide.
+
+
+\subsection{Windows Held-Out Validation}
+\label{sec:windows_v3}
+
+We repeat the 5-criterion validation on 3~models evaluated via Windows GPU (generation on Windows, embedding on Mac).
+
+\begin{table}[h]
+\centering
+\caption{Windows held-out BFI under 3~conditions (9 of 9~cells complete).}
+\label{tab:heldout_win}
+\small
+\begin{tabular}{llcccccc}
+\toprule
+Model & Condition & $F$ & $C$ & $I$ & $S$ & $\text{BFI}_{\min}$ & Bottleneck \\
+\midrule
+gemma4:e4b & neutral & 0.823 & 0.861 & \textbf{0.407} & 0.644 & 0.407 & $I$ \\
+gemma4:e4b & poet    & \textbf{0.542} & 0.846 & 0.815 & 0.815 & 0.542 & $F$ \\
+gemma4:e4b & believe & 0.868 & 0.755 & \textbf{0.643} & 0.801 & 0.643 & $I$ \\
+\midrule
+qwen3.5:9b & neutral & 0.753 & 0.966 & 0.949 & 0.892 & 0.753 & $F$ \\
+qwen3.5:9b & poet    & 0.671 & 0.965 & 0.947 & 0.932 & 0.671 & $F$ \\
+qwen3.5:9b & believe & 0.654 & 0.948 & 0.941 & 0.925 & 0.654 & $F$ \\
+\midrule
+qwen3.5:35b & neutral & 0.754 & 0.970 & 0.942 & 0.903 & 0.754 & $F$ \\
+qwen3.5:35b & poet    & 0.667 & 0.970 & 0.942 & 0.929 & 0.667 & $F$ \\
+qwen3.5:35b & believe & 0.661 & 0.954 & 0.947 & 0.916 & 0.661 & $F$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{5-criterion validation results (Windows held-out, 9 of 9~cells complete).}
+\label{tab:criteria_win}
+\begin{tabular}{lccl}
+\toprule
+Criterion & Value & Threshold & Result \\
+\midrule
+BI (Bottleneck = $F$) & 83\% (5/6) & $\geq 80\%$ & \textbf{Pass} \\
+DD (poet) & $|\Delta F| = 0.150$ & $> \max(\Delta C, \Delta I, \Delta S)$ & \textbf{Pass} \\
+DD (believe) & $|\Delta F| = 0.079$ & $< |\Delta I| = 0.083$ & Fail \\
+RC (severity ordering) & 2/3 models & $\geq 2/3$ & \textbf{Pass} \\
+SA (signal amplification) & $4.34\times$ & $\geq 2.0\times$ & \textbf{Pass} \\
+SP (specificity) & ICC documented & $\Delta \approx 0$ & \textbf{Pass} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{4 of 5~criteria pass on Windows held-out.} The Qwen-family models (qwen3.5:9b and qwen3.5:35b) show the expected severity ordering: $\text{BFI}_{\min}(\text{neutral}) > \text{BFI}_{\min}(\text{poet}) > \text{BFI}_{\min}(\text{believe})$, yielding RC~Pass. Signal amplification is stronger on Windows ($4.34\times$ vs $2.13\times$ on Mac), likely because the Qwen models show larger absolute $F$-drops.
+
+\paragraph{Combined platform analysis.}
+Across both platforms (18~cells total, 12~perturbation cells), the structural criteria hold universally: BI passes at 92\% (11/12~cells show $F$-bottleneck), SA passes at $2.1$--$4.3\times$, and DD-poet passes on both. Only DD-believe and RC are platform-dependent, driven by the ``believe'' primer's inconsistent severity across model families. Poet identity priming is the more reliable perturbation condition.
+
+\subsection{Scale: Directional Observation Only}
+\label{sec:scale}
+
+\citet{mazeika2025utility} report utility coherence increases monotonically with model scale ($r = 0.76$ with MMLU across 23~models). We characterize whether $\text{BFI}_{\min}$ shows similar emergence in our 8-model sample, but note upfront: \textbf{N=8 with a wide CI is not adequate for a quantitative scale claim.} We report the table for transparency and the result as a directional observation only.
+
+\begin{table}[h]
+\centering
+\caption{$\text{BFI}_{\min}$ (single-turn, neutral) across 8~local models by parameter count. Reported as descriptive statistics, not as evidence for a scale claim.}
+\label{tab:scale}
+\begin{tabular}{llccl}
+\toprule
+Model & Parameters & $\text{BFI}_{\min}$ & $\text{BFI}_{4D}$ & Bottleneck \\
+\midrule
+phi4-mini         & 3.8B  & 0.720 & 0.830 & $F$ \\
+nemotron-3-nano   & 4.0B  & 0.785 & 0.884 & $F$ \\
+gemma3:4b         & 4.3B  & 0.603 & 0.834 & $F$ \\
+mistral:7b        & 7.2B  & 0.784 & 0.866 & $F$ \\
+gemma4:e4b        & 8.0B  & 0.407 & 0.684 & $I$ \\
+qwen3.5:9b        & 9.7B  & 0.803 & 0.869 & $F$ \\
+llava:13b         & 13.0B & 0.829 & 0.892 & $F$ \\
+qwen3.5:35b       & 36.0B & 0.754 & 0.892 & $F$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+In our 8-model sample, $\text{BFI}_{\min}$ does not increase monotonically with parameter count. A naive Pearson correlation gives $r = 0.20$, but the 95\% confidence interval at $N = 8$ is approximately $[-0.60, +0.79]$. This interval contains zero, contains a moderate positive effect, and contains a moderate negative effect simultaneously. \textbf{We extract no quantitative claim from this analysis.} A meaningful scale-vs-BFI investigation requires $N \geq 16$ models with controlled family selection; this is on the future-work roadmap and is not in the current paper.
+
+\paragraph{Within-family analysis (controlling for the family confound).}
+The cross-family $r = 0.20$ in Table~\ref{tab:scale} confounds parameter count with family, architecture, and training methodology. To partially decouple these, we examine within-family scale where we have multiple sizes:
+\begin{table}[h]
+\centering
+\caption{Within-family $\text{BFI}_{\min}$ at neutral baseline. Limited to families with at least 2 sizes in our cohort.}
+\label{tab:scale_within}
+\begin{tabular}{lll}
+\toprule
+Family & Sizes evaluated & $\text{BFI}_{\min}$ ordering \\
+\midrule
+Qwen   & 9.7B, 36B          & $0.803 \to 0.754$ (decreasing) \\
+Gemma  & 4.3B, 8B           & $0.603 \to 0.407$ (decreasing) \\
+Llama  & 3.2B, 8B$^\dagger$ & not directly comparable (cohort drift) \\
+\bottomrule
+\end{tabular}
+\\[4pt]
+\footnotesize
+$^\dagger$ Llama family within-cohort comparison is contaminated by Llama 3.1 (released earlier) vs Llama 3.2 (released later) being separately tuned. Single-family scale claim withheld.
+\end{table}
+
+The within-family pattern in our limited data is \emph{not} monotonically increasing. Both Qwen and Gemma show $\text{BFI}_{\min}$ \emph{decreasing} with scale, the opposite of the utility-coherence trajectory \citet{mazeika2025utility} report. We treat this with appropriate caution: $N = 2$ within each family is insufficient for any strong claim, and the Qwen 9.7B vs 35B comparison is across different MoE configurations. The within-family observation is a tentative signal that the cross-family $r = 0.20$ may not be hiding a strong positive within-family effect; replication on additional Qwen and Gemma sizes is the natural follow-up.
+
+
+% ============================================================
+% 9. DISCUSSION
+% ============================================================
+\section{Discussion}
+\label{sec:discussion}
+
+\paragraph{Ego beliefs as the discriminator (classifier-conditional).}
+Within our classifier ensemble, ego-flattering normative claims produce the largest between-model variance (Cohen's $d \approx 2.40$). This is the most interesting finding in the paper and also the least trustworthy, because the classifier has its lowest reliability on this exact category ($\kappa_{\text{ego}} = 0.190$). Whether the ego-discrimination effect is a model behavior or a classifier artifact cannot be resolved without human labels.
+
+\paragraph{Universal position drift.}
+Every model drifts ($\Delta I < 0$). Single-turn BFI overestimates real-world resilience.
+
+\paragraph{The classifier bottleneck.}
+$\kappa_{\text{ego}} = 0.190$. Human adjudication of the 60-item labeling set is the highest-leverage improvement.
+
+\paragraph{The sycophancy constant.}
+A competing frontier model (Gemini~3~Flash) self-evaluated at BFI $0.87$; external audit yielded $0.75$. The 12-point delta ($\varepsilon \approx 0.12$) is a single observation, not an established constant; we report it as directional evidence that self-evaluation may inflate behavioral scores relative to independent audit. It motivates independent deterministic measurement over self-reported model cards but should not be cited as a measured population parameter without replication across multiple frontier models.
+
+\paragraph{Regulatory relevance.}
+BFI dimensions map to EU AI Act: Fidelity to Article~13, Independence to Article~10, Stability to Article~15, the deployment gate to Article~14. Cross-reference covering NIST AI RMF, SOC~2, ISO~42001 is in supplementary materials.
+
+\paragraph{Diagnostic, not predictive.}
+The held-out validation (Section~\ref{sec:heldout}) confirms that $\text{BFI}_{\min}$ reliably identifies the weakest dimension under perturbation (BI 92\% across 12~cells, SA $2.1$--$4.3\times$), but primer severity ranking does not transfer across model families (RC 0/3 on Mac, 2/3 on Windows). BFI is best positioned as a diagnostic framework: given a model and deployment condition, it identifies \emph{which} behavioral dimension is most vulnerable, not \emph{which} primer will cause the most damage. This is the operationally useful question for deployment decisions. Poet identity priming is the more reliable perturbation condition; ``believe in yourself'' is model-family dependent.
+
+\paragraph{Cross-host reproducibility.}
+The same model (qwen3.5:9b) evaluated on two hosts via Tailscale produces BFI scores within 4--6\% under neutral and poet conditions, and 12.4\% under the ``believe'' condition (Table~\ref{tab:crosshost}). The higher variation under ``believe'' is consistent with this primer's weaker reliability across the held-out validation. The noise floor of ${\sim}$6\% under standard conditions means BFI differences below this threshold should not be interpreted as meaningful.
+
+\paragraph{Distributional shift sensitivity.}
+BFI may best be understood as measuring how robustly a model behaves when inputs deviate from training distribution, connecting to established ML robustness theory rather than requiring novel behavioral constructs.
+
+\paragraph{Scale and durability.}
+\citet{mazeika2025utility} report utility coherence increases with scale ($r = 0.76$, $N = 23$). Our $N = 8$ sample is too small to make any quantitative claim about scale vs.\ behavioral durability ($r = 0.20$, 95\% CI $[-0.60, +0.79]$). We did not observe a monotonic trend; we cannot claim there is not one. A 16+ model evaluation with controlled family selection is required; this is future work.
+
+\paragraph{Operational considerations.}
+Deploying BFI as a monitoring system surfaces engineering realities that ML papers typically omit. Embedding infrastructure required 3-attempt retry with empty-result detection to achieve $<$5\% zero-score rate; a naive implementation produced silent failures in approximately 15\% of beliefs during high-load runs. Cross-host deployment (generation on one machine, embedding on another via Tailscale mesh) produced 3--6\% measurement variation, establishing a noise floor below which BFI differences are not meaningful. Reasoning models (e.g., qwen3.5 family) emit responses via a distinct ``thinking'' field that embedding pipelines must handle explicitly. We report these not as limitations but as specifications: any behavioral measurement system deployed in production will encounter them.
+
+\paragraph{Persistence vs.\ correctness.}
+BFI measures stance persistence, not correctness. A model that appropriately updates its position when given genuine evidence scores lower on $R$ under the current formula. This is a known construct validity gap. A correction-aware variant ($R^*$) that tags each turn as social-pressure-only vs.\ evidence-introduced and penalizes only capitulation (not evidence-based correction) is described in Future Work.
+
+\paragraph{Primer-architecture interaction.}
+The held-out data reveals that primer severity is not universal: poet priming degrades $F$ for Qwen/Llama families but shifts the bottleneck to $I$ for Gemma; ``believe in yourself'' is less degrading than poet on Mac held-out models but more degrading on Windows Qwen models. A systematic primer-architecture interaction matrix (mapping which perturbation families affect which dimensions for each model family) would replace the current one-size-fits-all perturbation battery with targeted, architecture-aware testing. This matrix is the natural next step for operationalizing $\text{BFI}_\Delta$.
+
+\paragraph{Additional findings.}
+Cascade contamination between model pairs is binary (0.0 or ${\sim}$0.933; 16.7\% incidence, 60~chain tests); Arabic shows 40--60\% accuracy drops on local models with zero gap on frontier; five pharmacological dose-response profiles; three hysteresis types. Domain-dependent sycophancy is also observed: Grok scores $\pi \approx 0.20$ on factual myths (lowest in our cohort) but ${\sim}0.90$ on personal-advice scenarios in a separate advisory probe, suggesting that model behavioral profiles are domain-conditional and that single-domain BFI scores may not transfer across deployment contexts. Reported in the full research record.
+
+% ============================================================
+% 8. LIMITATIONS
+% ============================================================
+\section{Limitations}
+\label{sec:limitations}
+
+\begin{enumerate}
+    \item \textbf{Bootstrap CIs computed for $R$ only.} Per-belief bootstrap 95\% CIs are reported for multi-turn $R$ (Section~\ref{sec:results}). Bootstrap CIs for single-turn $F$, $C$, $I$, $S$ have not been computed because the gold-standard April~5 embedding run did not preserve per-belief raw data. All inference is via resampling, not parametric tests.
+    \item \textbf{Convenience sample partially mitigated.} Six primary models plus 5~held-out (3.8B--36B) across 2~hosts; still cannot fully disentangle scale, architecture, training, RLHF. Gemma-architecture sensitivity (Section~\ref{sec:heldout}) suggests architecture is a major factor. Held-out validation verdict is platform-dependent (3/5 Mac, 4/5 Windows), indicating model-selection sensitivity in the test design.
+    \item \textbf{Ground truth mixes facts and values.} Five ego beliefs are philosophical, not verifiable.
+    \item \textbf{No human ground truth for classifier.} The 60-item labeling set is not yet adjudicated by humans. A secondary LLM adjudication (Claude Opus~4.6, separate from the 3-judge ensemble) showed 92.2\% agreement with the primary classifier on the 51~ego items, but this is LLM-to-LLM agreement. Independent human adjudication is the next required methodological step.
+    \item \textbf{Embedding infrastructure.} Silent embedding timeouts caused zero-valued scores in approximately 15\% of beliefs during high-load runs. Post-hoc re-embedding of stored responses recovered 50~beliefs across 13~cells. Production deployments require retry-aware embedding with empty-result detection.
+    \item \textbf{Pressure not strictly monotonic.} Two inversions in the 7-turn sequence.
+    \item \textbf{PCA general factor.} One trait, not four independent dimensions.
+    \item \textbf{Classifier determines findings.} gemma3: $R = 0.150$ (keyword) vs.\ $0.899$ (ensemble).
+    \item \textbf{BFI-delta from preliminary priming, not standardized protocol.}
+    \item \textbf{Classifier not adversarially tested.} A model could potentially game the stance classifier by producing formulaic disagreement phrases (e.g., ``I respectfully disagree'') without substantive correction. Red-teaming the 3-judge ensemble against adversarial responses is future work.
+\end{enumerate}
+
+% ============================================================
+% 9. FUTURE WORK
+% ============================================================
+\section{Future Work}
+
+Four independent diagnostic dimensions (Calibration, Refusal, Self-Knowledge, Instruction Following) validated orthogonal to base four ($\max r = 0.431$, 8~models). Information-theoretic supplementary metrics (Behavioral Entropy, Mutual Information, Jensen--Shannon Divergence, Conformal Coverage Integrity) have been computed on the primary cohort and will be reported in a follow-up paper focused on ensemble routing and failure profiling; we omit them here to keep the present manuscript focused on the five-dimension framework. Two extensions to the $R$ dimension are planned: (1)~\emph{Correction-aware $R^*$}, which separates capitulation (stance change under social pressure) from correction (stance change under new evidence), resolving the construct validity limitation that current $R$ penalizes appropriate belief updating; and (2)~an \emph{Elasticity} dimension $E$ that extends the protocol from 7 to 10~turns, with turns 8--10 removing pressure to measure recovery behavior (snap-back vs.\ ratchet). Both require human annotation of turn-level evidence tags and are deferred pending completion of the human labeling task.
+
+Standardized $\text{BFI}_\Delta$ profiling across a primer-severity interaction matrix (which primers degrade which architectures), human labeling of the 60-item set, confirmatory factor analysis, cross-architecture dimensional profiling (systematic comparison of $F$-bottleneck vs.\ $I$-bottleneck model families), expanded model set (in progress: 11~models evaluated, targeting 16+ across 3B--70B), and longitudinal BFI tracking are priorities. Automated embedding recovery (retry-aware scoring pipeline) is being integrated for production reliability.
+
+% ============================================================
+% 10. CONCLUSION
+% ============================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+Capability benchmarks tell you what a model can do. They do not tell you what it will do when a user pushes back, frames a question emotionally, or insists on a wrong answer for seven turns. BFI measures this gap.
+
+Three findings from 11~models are clear. Every model drifts under sustained pressure. Stance-weighted Fidelity exposes sycophancy that raw similarity hides. And $\text{BFI}_{\min}$ catches dangerous conditions that weighted averaging conceals. These hold across primary and held-out cohorts, across two hardware platforms, and are stable under leave-one-out sensitivity analysis.
+
+The framework has structural depth: PCA suggests the four single-turn dimensions share a strong common factor, meaning $\text{BFI}_{\min}$ may be a robust conservative estimate of one general behavioral robustness trait rather than identification of five independent vulnerabilities. The stateless vs.\ stateful $\text{BFI}_\Delta$ distinction identifies a class of hysteresis failures invisible to single-session measurement.
+
+The framework also has real gaps. The ego-discrimination effect ($d \approx 2.40$) cannot be validated without human adjudication of the stance classifier ($\kappa_{\text{ego}} = 0.190$). Scale claims are underpowered at $N = 8$. All scores depend on one embedding model. These are not footnote-level caveats; they constrain what BFI can claim today.
+
+What closes these gaps is straightforward: human labels on 158~ego items, embedding ablation across 2+ models, expansion to 16+ models with family-controlled sampling, and independent replication by a second research group. The framework is ready for external scrutiny, and the release status of the accompanying code and data is described in the Data Availability Statement. We invite collaboration.
+
+% ============================================================
+% ACKNOWLEDGMENTS
+% ============================================================
+\section*{Acknowledgments}
+
+Claude Opus~4.6 (Anthropic) was used via the Claude Code CLI for drafting support, execution of test scripts under direction, computation of intermediate statistical artifacts, generation of tabular layouts, and copy-editing of manuscript prose. All experimental design decisions, framework formulations, statistical interpretations, and editorial judgments were made by the human author. The model is acknowledged here for transparency and is not a co-author.
+
+\section*{Funding}
+
+This research received no external funding.
+
+\section*{Institutional Review Board Statement}
+
+Not applicable. This study evaluated language model outputs and did not involve human participants, animals, or identifiable personal data.
+
+\section*{Informed Consent Statement}
+
+Not applicable.
+
+\section*{Data Availability Statement}
+
+The principal summary results are reported in the manuscript tables and figures. Machine-readable artifacts prepared for this submission include the execution scripts used for the explicit rerun path, retest manifests, held-out validation outputs, and archived result bundles covering both the paper-core rerun set and the broader historical BFI test corpus. These materials are available through the public project mirror at \url{https://github.com/ulfberht-ai/BFI}, which contains the scripts, manifest files, and archived result bundles referenced in this manuscript. Equivalent materials may also accompany the submission as supplementary files for screening convenience. Additional clarifying materials can be provided by the corresponding author on request.
+
+\section*{Conflicts of Interest}
+
+The author declares a potential financial interest as inventor on related provisional patent applications concerning aspects of the Behavioral Fidelity Index (BFI) framework and associated deployment-gate variants. A related provisional application was filed before this preprint submission. The author declares no other conflicts of interest.
+
+% ============================================================
+% REFERENCES
+% ============================================================
+\bibliographystyle{plainnat}
+\bibliography{BFI-paper-FINAL-references}
+
+\end{document}
